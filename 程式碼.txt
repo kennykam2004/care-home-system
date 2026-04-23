@@ -1,0 +1,2620 @@
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
+
+// --- Shared Helper ---
+const formatCurrency = (num) => {
+  if (num === undefined || num === null || num === '') return '0.00';
+  const cleanNum = typeof num === 'string' ? num.replace(/,/g, '') : num;
+  const n = Number(cleanNum);
+  return isNaN(n) ? '0.00' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// 基礎簡轉繁對照表 (針對常見姓名用字)
+const simpToTradMap = {
+  '陈': '陳', '张': '張', '刘': '劉', '郑': '鄭', '孙': '孫', '赵': '趙', '吴': '吳', '黄': '黃',
+  '华': '華', '丽': '麗', '强': '強', '国': '國', '娇': '嬌', '荣': '榮', '冯': '馮', '杨': '楊',
+  '朱': '朱', '许': '許', '邓': '鄧', '钟': '鍾', '韩': '韓', '唐': '唐', '罗': '羅', '梁': '梁',
+  '宋': '宋', '叶': '葉', '萧': '蕭', '汪': '汪', '蒋': '蔣', '顾': '顧', '韦': '韋', '钱': '錢',
+  '邹': '鄒', '马': '馬', '苏': '蘇', '齐': '齊', '贺': '賀', '严': '嚴', '乔': '喬', '龙': '龍',
+  '万': '萬', '宝': '寶', '欢': '歡', '伟': '偉', '发': '發', '财': '財', '东': '東', '爱': '愛',
+  '庆': '慶', '义': '義', '胜': '勝', '学': '學', '广': '廣', '亚': '亞', '伦': '倫', '进': '進',
+  '达': '達', '辉': '輝', '跃': '躍', '远': '遠', '运': '運', '连': '連', '选': '選', '还': '還',
+  '泽': '澤', '洁': '潔', '洋': '洋', '洲': '洲', '浑': '渾', '涛': '濤', '润': '潤', '涨': '漲',
+  '涩': '澀', '涣': '渾', '涤': '潔', '涧': '澗', '淳': '淳', '添': '添', '清': '清',
+  '渊': '淵', '渍': '滌', '渐': '漸', '渔': '漁', '渗': '滲', '温': '溫', '游': '遊', '湾': '灣'
+};
+
+const normalizeChinese = (str) => {
+  if (!str) return '';
+  return str.split('').map(char => simpToTradMap[char] || char).join('');
+};
+
+// --- Shared Pagination Hook ---
+const usePagination = (data) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data.length, pageSize]);
+
+  const totalPages = Math.ceil(data.length / pageSize) || 1;
+  const currentData = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  return { currentPage, setCurrentPage, pageSize, setPageSize, totalPages, currentData, totalCount: data.length };
+};
+
+// --- Shared Pagination UI Components ---
+const PageSizeSelector = ({ pageSize, setPageSize }) => (
+  <div className="flex items-center gap-2 text-sm text-gray-600">
+    <select
+      value={pageSize}
+      onChange={(e) => setPageSize(Number(e.target.value))}
+      className="border border-gray-200 bg-white rounded-lg px-3 py-1.5 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+    >
+      <option value={10}>10 條/頁</option>
+      <option value={25}>25 條/頁</option>
+      <option value={50}>50 條/頁</option>
+    </select>
+  </div>
+);
+
+const PaginationFooter = ({ totalCount, currentPage, setCurrentPage, totalPages }) => {
+  const [jumpPage, setJumpPage] = useState('');
+
+  const handleJump = (e) => {
+    if (e.key === 'Enter') {
+      const page = parseInt(jumpPage, 10);
+      if (!isNaN(page) && page >= 1 && page <= totalPages) {
+        setCurrentPage(page);
+      }
+      setJumpPage('');
+    }
+  };
+
+  const renderPageNumbers = () => {
+    const pages = [];
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + 4);
+    if (end - start < 4) {
+      start = Math.max(1, end - 4);
+    }
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(
+        <button
+          key={i}
+          onClick={() => setCurrentPage(i)}
+          className={`w-8 h-8 rounded-md text-sm font-medium transition-colors ${currentPage === i ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          {i}
+        </button>
+      );
+    }
+    return pages;
+  };
+
+  return (
+    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-white shrink-0">
+      <div className="text-sm text-gray-500">共 {totalCount} 條</div>
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-1">
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 disabled:opacity-50 transition-colors"><ChevronRight size={16} className="rotate-180" /></button>
+          {renderPageNumbers()}
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 disabled:opacity-50 transition-colors"><ChevronRight size={16} /></button>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          前往
+          <input
+            type="text"
+            value={jumpPage}
+            onChange={(e) => setJumpPage(e.target.value)}
+            onKeyDown={handleJump}
+            className="w-12 text-center border border-gray-200 bg-gray-50/50 rounded-lg py-1 outline-none focus:bg-white focus:border-blue-500 transition-all"
+          />
+          頁
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- Initial Data ---
+const initialCustomers = [
+  { id: '18001', careId: '2003', name: '林阿水', bed: '310101', gender: '男', idCard: 'A135792468', birth: '1938-05-12', balance: '1500.00', phone: '0911222333', status: '在院', basicFee: '9900.00', family: [{ name: '林志明', phone: '0988777666', isMain: true }] },
+  { id: '18002', careId: '2003', name: '陳美蘭', bed: '310102', gender: '女', idCard: 'A246813579', birth: '1942-11-23', balance: '0.00', phone: '0922333444', status: '在院', basicFee: '9900.00', family: [{ name: '王建國', phone: '0977666555', isMain: true }] },
+  { id: '18003', careId: '2003', name: '黃金火', bed: '310201', gender: '男', idCard: 'A112233445', birth: '1935-08-08', balance: '500.00', phone: '0933444555', status: '在院', basicFee: '9900.00', family: [{ name: '黃曉華', phone: '0966555444', isMain: true }] },
+  { id: '18004', careId: '2003', name: '李玉梅', bed: '310202', gender: '女', idCard: 'A223344556', birth: '1945-02-14', balance: '0.00', phone: '0944555666', status: '在院', basicFee: '9900.00', family: [{ name: '陳俊傑', phone: '0955444333', isMain: true }] },
+  { id: '18005', careId: '2003', name: '張春生', bed: '320101', gender: '男', idCard: 'A198765432', birth: '1939-09-30', balance: '200.00', phone: '0955666777', status: '在院', basicFee: '9900.00', family: [{ name: '張雅婷', phone: '0944333222', isMain: true }] },
+  { id: '18006', careId: '2003', name: '王素珍', bed: '', gender: '女', idCard: 'A287654321', birth: '1941-04-05', balance: '0.00', phone: '0966777888', status: '離院', basicFee: '9900.00', family: [{ name: '李家豪', phone: '0933222111', isMain: true }] },
+  { id: '18007', careId: '2003', name: '吳木雄', bed: '320102', gender: '男', idCard: 'A123123123', birth: '1933-12-18', balance: '0.00', phone: '0977888999', status: '在院', basicFee: '9900.00', family: [{ name: '吳欣儀', phone: '0922111000', isMain: true }] },
+  { id: '18008', careId: '2003', name: '劉雪娥', bed: '320201', gender: '女', idCard: 'A234234234', birth: '1948-07-22', balance: '3000.00', phone: '0988999000', status: '在院', basicFee: '9900.00', family: [{ name: '林柏宇', phone: '0911000999', isMain: true }] },
+  { id: '18009', careId: '2003', name: '蔡添丁', bed: '320202', gender: '男', idCard: 'A145145145', birth: '1940-03-15', balance: '0.00', phone: '0999000111', status: '在院', basicFee: '9900.00', family: [{ name: '蔡佳玲', phone: '0900111222', isMain: true }] },
+  { id: '18010', careId: '2003', name: '楊秋菊', bed: '330101', gender: '女', idCard: 'A256256256', birth: '1937-10-09', balance: '120.00', phone: '0900111222', status: '在院', basicFee: '9900.00', family: [{ name: '張家維', phone: '0988222333', isMain: true }, { name: '張美玲', phone: '0988333444', isMain: false }] },
+  { id: '18011', careId: '2003', name: '許清河', bed: '330102', gender: '男', idCard: 'A167167167', birth: '1944-01-28', balance: '0.00', phone: '0911222333', status: '在院', basicFee: '9900.00', family: [{ name: '許冠宇', phone: '0977333444', isMain: true }] },
+  { id: '18012', careId: '2003', name: '鄭桂花', bed: '', gender: '女', idCard: 'A278278278', birth: '1936-06-11', balance: '0.00', phone: '0922333444', status: '離院', basicFee: '9900.00', family: [{ name: '陳冠廷', phone: '0966444555', isMain: true }] },
+  { id: '18013', careId: '2003', name: '謝文雄', bed: '330201', gender: '男', idCard: 'A189189189', birth: '1946-08-31', balance: '800.00', phone: '0933444555', status: '在院', basicFee: '9900.00', family: [{ name: '謝雅惠', phone: '0955555666', isMain: true }] },
+  { id: '18014', careId: '2003', name: '郭淑華', bed: '330202', gender: '女', idCard: 'A290290290', birth: '1943-12-04', balance: '0.00', phone: '0944555666', status: '在院', basicFee: '9900.00', family: [{ name: '林志豪', phone: '0944666777', isMain: true }] },
+  { id: '18015', careId: '2003', name: '洪阿福', bed: '340101', gender: '男', idCard: 'A109876543', birth: '1934-02-27', balance: '0.00', phone: '0955666777', status: '在院', basicFee: '9900.00', family: [{ name: '洪婉婷', phone: '0933777888', isMain: true }] }
+];
+
+const initialServices = [
+  { id: 'M001', type: '護理服務', isCommon: '是', name: '血糖測試', price: '20.00', stock: 9536 },
+  { id: 'M002', type: '護理服務', isCommon: '是', name: '抽血費', price: '100.00', stock: '無限' },
+  { id: 'M003', type: '護理服務', isCommon: '是', name: '鼻氧管', price: '7.00', stock: 150 },
+  { id: 'M004', type: '護理服務', isCommon: '否', name: '傷口護理費 (小)', price: '30.00', stock: '無限' },
+  { id: 'M005', type: '護理服務', isCommon: '否', name: '傷口護理費 (中)', price: '50.00', stock: '無限' },
+  { id: 'M006', type: '護理服務', isCommon: '是', name: '製氧機護理費', price: '300.00', stock: '無限' },
+  { id: 'M007', type: '護理服務', isCommon: '是', name: '尿管護理費', price: '300.00', stock: '無限' },
+  { id: 'M008', type: '護理服務', isCommon: '否', name: '尿袋', price: '12.00', stock: 500 },
+  { id: 'M009', type: '護理服務', isCommon: '是', name: '胃管護理費', price: '300.00', stock: '無限' },
+  { id: 'M010', type: '護理服務', isCommon: '是', name: '血糖監測+注射服務', price: '500.00', stock: 950 },
+  { id: 'M011', type: '護理服務', isCommon: '是', name: '注射服務', price: '30.00', stock: '無限' },
+  { id: 'M012', type: '護理服務', isCommon: '是', name: '更換胃管', price: '100.00', stock: '無限' },
+  { id: 'M013', type: '護理服務', isCommon: '否', name: '傷口護理費 (大)', price: '80.00', stock: '無限' },
+  { id: 'M014', type: '護理服務', isCommon: '是', name: 'DuoDERM密封式水凝膠敷料', price: '39.20', stock: 200 },
+  { id: 'M015', type: '護理服務', isCommon: '是', name: 'Hydrofiber+Ag', price: '101.60', stock: 150 },
+  { id: 'M016', type: '護理服務', isCommon: '是', name: 'Foams', price: '49.80', stock: 300 },
+  { id: 'M017', type: '護理服務', isCommon: '是', name: 'UrgoTul 親水油紗布', price: '20.60', stock: 400 },
+  { id: 'M018', type: '護理服務', isCommon: '是', name: '氧氣面罩', price: '23.00', stock: 80 },
+  { id: 'M019', type: '護理服務', isCommon: '是', name: '皮下注射', price: '300.00', stock: '無限' },
+  { id: 'M020', type: '護理服務', isCommon: '是', name: '更換尿管', price: '100.00', stock: '無限' },
+  { id: 'M021', type: '護理服務', isCommon: '否', name: '抽痰', price: '20.00', stock: '無限' },
+  { id: 'M022', type: '護理服務', isCommon: '是', name: '氣墊床', price: '300.00', stock: 15 },
+  
+  { id: 'C001', type: '照顧服務', isCommon: '是', name: '陪診', price: '50.00', stock: '無限' },
+  { id: 'C002', type: '照顧服務', isCommon: '是', name: '夜用尿片 (中碼) Medical', price: '50.00', stock: 14 },
+  { id: 'C003', type: '照顧服務', isCommon: '是', name: '日用尿片 (中碼) Medical', price: '40.00', stock: 50 },
+  { id: 'C004', type: '照顧服務', isCommon: '是', name: '床墊', price: '25.00', stock: 30 },
+  { id: 'C005', type: '照顧服務', isCommon: '是', name: '夜用尿片 (大碼) Medical', price: '50.00', stock: 45 },
+  { id: 'C006', type: '照顧服務', isCommon: '是', name: '日用尿片 (大碼) Medical', price: '40.00', stock: 60 },
+  { id: 'C007', type: '照顧服務', isCommon: '是', name: '急診陪送', price: '100.00', stock: '無限' },
+  { id: 'C008', type: '照顧服務', isCommon: '是', name: '夜用尿片 (中碼)', price: '55.00', stock: 100 },
+  { id: 'C009', type: '照顧服務', isCommon: '是', name: '日用尿片(大碼)', price: '110.00', stock: 120 },
+  { id: 'C010', type: '照顧服務', isCommon: '是', name: '夜用尿片 (大碼)', price: '55.00', stock: 80 },
+  { id: 'C011', type: '照顧服務', isCommon: '是', name: '日用尿片(中碼)', price: '55.00', stock: 150 },
+  { id: 'C012', type: '照顧服務', isCommon: '是', name: '凝固粉 (細罐125g)', price: '39.00', stock: 200 },
+  { id: 'C013', type: '照顧服務', isCommon: '否', name: '好的接送 (單程)', price: '30.00', stock: '無限' },
+  { id: 'C014', type: '照顧服務', isCommon: '否', name: '洗腎陪送 (來回)', price: '100.00', stock: '無限' },
+  { id: 'C015', type: '照顧服務', isCommon: '是', name: '冷氣費', price: '100.00', stock: '無限' }
+];
+
+const initialInventoryRecords = [
+  { id: 'REC0346561444336779264', itemId: 'C001', date: '2026-04-16 18:00:00', type: '照顧服務', reason: '增加', qty: 4 },
+  { id: 'REC0346561444336779265', itemId: 'C001', date: '2026-04-17 10:30:00', type: '照顧服務', reason: '客戶服務使用扣除', qty: -2 },
+  { id: 'REC0346561444336779266', itemId: 'M001', date: '2026-04-15 09:15:00', type: '護理服務', reason: '增加', qty: 100 },
+];
+
+const initialServiceRecords = [
+  { recordId: 'SR001', customerId: '2504', date: '2026-03-13', type: '照顧服務', id: 'C001', name: '陪診', qty: 3, amount: '150.00', note: '市立第一醫院骨科覆診' },
+  { recordId: 'SR002', customerId: '2504', date: '2026-02-05', type: '照顧服務', id: 'C001', name: '陪診', qty: 2, amount: '100.00', note: '社區健康中心抽血' },
+  { recordId: 'SR003', customerId: '18001', date: '2026-01-30', type: '護理服務', id: 'M003', name: '傷口護理費 (大)', qty: 1, amount: '80.00', note: '' },
+];
+
+const initialRoles = [
+  { name: '院長', id: 'AM01', org: '頤安(逸麗)護老院', desc: '頤安(逸麗)護老院 院長' },
+  { name: '護士', id: 'AM02', org: '頤安(逸麗)護老院', desc: '頤安(逸麗)護老院 護士' },
+  { name: '活動協調員', id: 'AM03', org: '頤安(逸麗)護老院', desc: '頤安(逸麗)護老院 活動協調員' },
+  { name: '助理', id: 'AM04', org: '頤安(逸麗)護老院', desc: '頤安(逸麗)護老院 助理' },
+  { name: '入生命體徵健康照護員', id: 'AM05', org: '頤安(逸麗)護老院', desc: '頤安(逸麗)護老院 入生命體徵健康照護員' }
+];
+
+const initialUsers = [
+  { name: '王小華 入生命體徵健康照護員', id: '203012', status: '啟動', role: '入生命體徵健康照護員' },
+  { name: '陳建民 入生命體徵健康照護員', id: '203011', status: '啟動', role: '入生命體徵健康照護員' },
+  { name: '林佳玲 入生命體徵健康照護員', id: '203010', status: '啟動', role: '入生命體徵健康照護員' },
+  { name: '張雅婷 入生命體徵健康照護員', id: '203009', status: '啟動', role: '入生命體徵健康照護員' },
+  { name: '吳志明 入生命體徵健康照護員', id: '203008', status: '啟動', role: '入生命體徵健康照護員' },
+  { name: '劉家豪 入生命體徵健康照護員', id: '203007', status: '啟動', role: '入生命體徵健康照護員' },
+  { name: '楊曉雯 助理', id: '203006', status: '啟動', role: '助理' },
+  { name: '趙子龍 助理', id: '203005', status: '啟動', role: '助理' },
+  { name: '孫麗君 助理', id: '203004', status: '啟動', role: '助理' },
+  { name: '周家宇 活動協調員', id: '203003', status: '啟動', role: '活動協調員' },
+];
+
+export default function App() {
+  const [activeMenu, setActiveMenu] = useState('客戶信息管理');
+  const [expandedMenus, setExpandedMenus] = useState({
+    '系統管理': false,
+    '養老院管理': true,
+    '庫存管理': false,
+    '收費管理': false
+  });
+  
+  // --- Global State ---
+  const [customers, setCustomers] = useState(initialCustomers);
+  const [services, setServices] = useState(initialServices);
+  const [inventoryRecords, setInventoryRecords] = useState(initialInventoryRecords);
+  const [serviceRecords, setServiceRecords] = useState(initialServiceRecords);
+  const [roles, setRoles] = useState(initialRoles);
+  const [users, setUsers] = useState(initialUsers);
+  
+  const [modalType, setModalType] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const toggleMenu = (menu) => {
+    setExpandedMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
+  };
+
+  const openModal = (type, customer) => {
+    setModalType(type);
+    setSelectedCustomer(customer);
+  };
+
+  const closeModal = () => {
+    setModalType(null);
+    setSelectedCustomer(null);
+  };
+
+  const TopBar = () => (
+    <div className="bg-white/70 backdrop-blur-md text-gray-800 h-14 flex items-center justify-between px-6 border-b border-gray-200/50 w-full shrink-0 z-10 sticky top-0">
+      <div className="flex items-center gap-3">
+        <img src="https://upload.wikimedia.org/wikipedia/zh/d/d9/Caritas_Macau_logo.svg" alt="明愛" className="h-9 object-contain drop-shadow-sm" />
+        <div className="text-base font-bold text-gray-800 tracking-tight">頤安三院倉存管理系統</div>
+      </div>
+      <div className="flex items-center gap-4 text-sm font-medium">
+        <span className="text-gray-600">👤 頤安(逸麗)護老院, 甘家豪 院長</span>
+        <span className="text-gray-500 bg-gray-100/50 px-2 py-1 rounded-md">繁體中文</span>
+      </div>
+    </div>
+  );
+
+  const Sidebar = () => (
+    <div className="w-64 bg-white/50 backdrop-blur-xl h-full flex flex-col text-sm border-r border-gray-200/50 overflow-y-auto shrink-0 transition-all">
+      <div className="flex-1 px-3 pt-4 pb-4 space-y-1">
+        <div>
+          <button onClick={() => toggleMenu('系統管理')} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-gray-100/50 text-gray-700 font-medium transition-colors">
+            <span>系統管理</span>
+            {expandedMenus['系統管理'] ? <ChevronDown size={16} className="text-gray-400"/> : <ChevronRight size={16} className="text-gray-400"/>}
+          </button>
+          {expandedMenus['系統管理'] && (
+            <div className="mt-1 mb-2 space-y-0.5">
+              <div className="pl-9 pr-3 py-2 rounded-xl text-gray-500 hover:bg-gray-100/50 hover:text-gray-800 cursor-pointer transition-colors">權限管理</div>
+              <div 
+                className={`pl-9 pr-3 py-2 rounded-xl cursor-pointer transition-colors ${(activeMenu === '角色管理' || activeMenu === '新增角色' || activeMenu === '編輯角色') ? 'bg-blue-500 text-white shadow-sm font-medium' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-800'}`}
+                onClick={() => setActiveMenu('角色管理')}
+              >角色管理</div>
+              <div 
+                className={`pl-9 pr-3 py-2 rounded-xl cursor-pointer transition-colors ${(activeMenu === '用戶管理' || activeMenu === '編輯用戶') ? 'bg-blue-500 text-white shadow-sm font-medium' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-800'}`}
+                onClick={() => setActiveMenu('用戶管理')}
+              >用戶管理</div>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <button onClick={() => toggleMenu('養老院管理')} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-gray-100/50 text-gray-700 font-medium transition-colors">
+            <span>養老院管理</span>
+            {expandedMenus['養老院管理'] ? <ChevronDown size={16} className="text-gray-400"/> : <ChevronRight size={16} className="text-gray-400"/>}
+          </button>
+          {expandedMenus['養老院管理'] && (
+            <div className="mt-1 mb-2 space-y-0.5">
+              <div 
+                className={`pl-9 pr-3 py-2 rounded-xl cursor-pointer transition-colors ${activeMenu === '客戶信息管理' ? 'bg-blue-500 text-white shadow-sm font-medium' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-800'}`}
+                onClick={() => setActiveMenu('客戶信息管理')}
+              >
+                客戶信息管理
+              </div>
+              <div className="pl-9 pr-3 py-2 rounded-xl text-gray-500 hover:bg-gray-100/50 hover:text-gray-800 cursor-pointer transition-colors" onClick={() => openModal('notAvailable')}>預繳費記錄</div>
+              
+              <div>
+                <button onClick={() => toggleMenu('庫存管理')} className="w-full flex items-center justify-between pl-9 pr-3 py-2 rounded-xl text-gray-500 hover:bg-gray-100/50 hover:text-gray-800 cursor-pointer transition-colors">
+                  <span>庫存管理</span>
+                  {expandedMenus['庫存管理'] ? <ChevronDown size={14} className="text-gray-400"/> : <ChevronRight size={14} className="text-gray-400"/>}
+                </button>
+                {expandedMenus['庫存管理'] && (
+                  <div className="mt-1 mb-1 space-y-0.5 border-l-2 border-gray-100 ml-10 pl-2">
+                    <div 
+                      className={`pl-4 pr-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${activeMenu === '庫存概覽' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-800'}`}
+                      onClick={() => setActiveMenu('庫存概覽')}
+                    >庫存概覽</div>
+                    <div 
+                      className={`pl-4 pr-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${activeMenu === '服務管理' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-800'}`}
+                      onClick={() => setActiveMenu('服務管理')}
+                    >服務管理</div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <button onClick={() => toggleMenu('收費管理')} className="w-full flex items-center justify-between pl-9 pr-3 py-2 rounded-xl text-gray-500 hover:bg-gray-100/50 hover:text-gray-800 cursor-pointer transition-colors">
+                  <span>收費管理</span>
+                  {expandedMenus['收費管理'] ? <ChevronDown size={14} className="text-gray-400"/> : <ChevronRight size={14} className="text-gray-400"/>}
+                </button>
+                {expandedMenus['收費管理'] && (
+                  <div className="mt-1 mb-1 space-y-0.5 border-l-2 border-gray-100 ml-10 pl-2">
+                    <div 
+                      className={`pl-4 pr-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${activeMenu === '賬單管理' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-500 hover:bg-gray-100/50 hover:text-gray-800'}`}
+                      onClick={() => setActiveMenu('賬單管理')}
+                    >賬單管理</div>
+                    <div className="pl-4 pr-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-gray-100/50 hover:text-gray-800 cursor-pointer transition-colors" onClick={() => openModal('notAvailable')}>賬單發佈</div>
+                    <div className="pl-4 pr-3 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-gray-100/50 hover:text-gray-800 cursor-pointer transition-colors" onClick={() => openModal('notAvailable')}>現金進賬</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const Breadcrumb = ({ items }) => (
+    <div className="text-gray-400 text-sm mb-6 flex items-center gap-2 font-medium">
+      {items.map((item, index) => (
+        <React.Fragment key={index}>
+          <span className={index === items.length - 1 ? 'text-gray-800' : ''}>{item}</span>
+          {index < items.length - 1 && <ChevronRight size={14} />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+
+  // --- Shared UI Components ---
+  const AppleInput = ({ label, placeholder, defaultValue, value, onChange, type = "text", disabled = false }) => {
+    const inputProps = value !== undefined ? { value, onChange } : { defaultValue, onChange };
+    return (
+      <div className="flex items-center border border-gray-200 bg-gray-50/50 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+        {label && <span className="text-sm text-gray-500 bg-gray-100/50 px-3 py-1.5 border-r border-gray-200/50 whitespace-nowrap shrink-0">{label}</span>}
+        <input type={type} placeholder={placeholder} disabled={disabled} className="p-1.5 px-3 outline-none text-sm w-full bg-transparent text-gray-800 placeholder-gray-400 disabled:text-gray-400" {...inputProps} />
+      </div>
+    );
+  };
+
+  const AppleSelect = ({ options, ...props }) => (
+    <select className="border border-gray-200 bg-gray-50/50 p-1.5 px-3 rounded-xl text-sm outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm text-gray-800 appearance-none pr-8 relative" {...props}>
+      {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+    </select>
+  );
+
+  const AppleButtonPrimary = ({ children, onClick, icon: Icon }) => (
+    <button onClick={onClick} className="bg-blue-500 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-blue-600 active:bg-blue-700 active:scale-[0.98] transition-all shadow-sm flex items-center gap-1.5">
+      {Icon && <Icon size={16} />}
+      {children}
+    </button>
+  );
+
+  const AppleButtonSecondary = ({ children, onClick, disabled = false }) => (
+    <button 
+      onClick={onClick} 
+      disabled={disabled}
+      className={`bg-white border border-gray-200/80 text-gray-700 px-5 py-2 rounded-xl text-sm font-medium transition-all shadow-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 active:bg-gray-100 active:scale-[0.98]'}`}
+    >
+      {children}
+    </button>
+  );
+
+  const CustomerView = () => {
+    const [statusFilter, setStatusFilter] = useState('在院');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredCustomers = customers.filter(c => {
+      const matchStatus = statusFilter === '全部' || c.status === statusFilter;
+      
+      const normalizedSearchTerm = normalizeChinese(searchTerm);
+      const matchKeyword = !searchTerm || 
+        (c.id || '').includes(searchTerm) || 
+        (c.careId || '').includes(searchTerm) || 
+        (c.name || '').includes(normalizedSearchTerm) || 
+        (c.bed || '').includes(searchTerm);
+      
+      return matchStatus && matchKeyword;
+    });
+
+    const paginationProps = usePagination(filteredCustomers);
+
+    const handleToggleStatus = (id, currentStatus) => {
+      const newStatus = currentStatus === '在院' ? '離院' : '在院';
+      setCustomers(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+    };
+
+    const handleReset = () => {
+      setStatusFilter('在院');
+      setSearchTerm('');
+    };
+
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['養老院管理', '客戶信息管理']} />
+
+        <div className="mb-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <AppleButtonPrimary icon={Plus} onClick={() => openModal('add', null)}>入院新增</AppleButtonPrimary>
+            
+            <div className="w-64">
+              <AppleInput label="查詢" placeholder="請輸入" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+            
+            <div className="flex items-center gap-2 text-sm border border-gray-200 bg-white rounded-xl px-3 py-[7px] shadow-sm">
+              <span className="text-gray-500 font-medium whitespace-nowrap">狀態</span>
+              <div className="relative w-16">
+                <select 
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full bg-transparent outline-none appearance-none text-center pr-5 text-gray-800 font-medium cursor-pointer"
+                  style={{ textAlignLast: 'center' }}
+                >
+                  <option value="全部">全部</option>
+                  <option value="在院">在院</option>
+                  <option value="離院">離院</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleReset} 
+              className="bg-white border border-gray-200/80 text-gray-700 px-4 py-[7px] rounded-xl text-sm font-medium hover:bg-gray-50 active:bg-gray-100 transition-all shadow-sm"
+            >
+              重置
+            </button>
+          </div>
+          <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left min-w-[1200px]">
+              <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">住院號 ↕</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">養老院編號</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">客戶姓名</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">床位號 ↕</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">性別</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">身份證號</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">出生日期</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">家屬姓名</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">家屬電話</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">狀態</th>
+                  <th className="py-3 px-4 font-medium text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-gray-700">
+                {paginationProps.currentData.map(c => {
+                  const familyData = c.family && c.family.length > 0 ? c.family : [{ name: '李小惠', phone: '0912111222', isMain: true }];
+                  const mainContact = familyData.find(f => f.isMain) || familyData[0];
+                  
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-4 px-4 font-medium">{c.id}</td>
+                      <td className="py-4 px-4 text-gray-500">{c.careId}</td>
+                      <td className="py-4 px-4">{c.name}</td>
+                      <td className="py-4 px-4">{c.bed}</td>
+                      <td className="py-4 px-4">{c.gender}</td>
+                      <td className="py-4 px-4">{c.idCard}</td>
+                      <td className="py-4 px-4">{c.birth}</td>
+                      <td className="py-4 px-4">{mainContact.name}</td>
+                      <td className="py-4 px-4 font-mono">{mainContact.phone}</td>
+                      <td className="py-4 px-4">
+                        <span className={`px-2 py-1 rounded-md text-xs font-medium ${c.status === '在院' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{c.status}</span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex flex-wrap gap-3 justify-center text-blue-500 font-medium">
+                          <button className="hover:text-blue-600 transition-colors" onClick={() => openModal('details', c)}>詳情</button>
+                          <button className="hover:text-blue-600 transition-colors" onClick={() => openModal('edit', c)}>修改</button>
+                          <button className="hover:text-blue-600 transition-colors" onClick={() => setActiveMenu(`服務記錄-${c.id}`)}>服務</button>
+                          <button className="hover:text-blue-600 transition-colors" onClick={() => handleToggleStatus(c.id, c.status)}>
+                            {c.status === '在院' ? '離院' : '在院'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter {...paginationProps} />
+        </div>
+      </div>
+    );
+  };
+
+  const ServiceRecordView = ({ customerId }) => {
+    const c = customers.find(c => c.id === customerId) || customers[0];
+    
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+
+    const filteredRecords = serviceRecords.filter(r => {
+      if (r.customerId !== customerId) return false;
+      if (appliedStartDate && r.date < appliedStartDate) return false;
+      if (appliedEndDate && r.date > appliedEndDate) return false;
+      return true;
+    });
+
+    const paginationProps = usePagination(filteredRecords);
+    
+    const totalAmount = formatCurrency(filteredRecords.reduce((sum, r) => sum + parseFloat(String(r.amount || 0).replace(/,/g, '')), 0));
+
+    const handleReset = () => {
+      setStartDate('');
+      setEndDate('');
+      setAppliedStartDate('');
+      setAppliedEndDate('');
+    };
+
+    const handleSearch = () => {
+      setAppliedStartDate(startDate);
+      setAppliedEndDate(endDate);
+    };
+    
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <div className="flex items-center justify-between mb-6">
+           <Breadcrumb items={['養老院管理', '客戶信息管理']} />
+           <AppleButtonSecondary onClick={() => setActiveMenu('客戶信息管理')}>返回</AppleButtonSecondary>
+        </div>
+       
+        <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 mb-6">
+          <h3 className="text-lg font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">基本資料</h3>
+          <div className="grid grid-cols-3 gap-y-4 gap-x-8 text-sm">
+            <div className="flex justify-between"><span className="text-gray-500">住院號</span> <span className="font-medium text-gray-900">{c.id}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">客戶姓名</span> <span className="font-medium text-gray-900">{c.name}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">性別</span> <span className="font-medium text-gray-900">{c.gender}</span></div>
+            
+            <div className="flex justify-between"><span className="text-gray-500">身份證號</span> <span className="font-medium text-gray-900">{c.idCard}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">地址</span> <span className="font-medium text-gray-900 text-right">頤安(逸麗)護老院</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">基本院費</span> <span className="font-medium text-gray-900">{parseFloat(c.basicFee || 0).toFixed(2)} MOP</span></div>
+            
+            <div className="flex justify-between"><span className="text-gray-500">預繳費餘額</span> <span className="font-medium text-blue-600">{c.balance} MOP</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">床位號</span> <span className="font-medium text-gray-900">{c.bed}</span></div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100">
+           <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center border border-gray-200 bg-gray-50/50 rounded-xl overflow-hidden shadow-sm text-sm">
+                <span className="text-gray-500 bg-gray-100/50 px-3 py-1.5 border-r border-gray-200/50">日期篩選</span>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="p-1.5 outline-none w-36 bg-transparent text-gray-700" />
+                <span className="px-2 text-gray-400">-</span>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="p-1.5 outline-none w-36 bg-transparent text-gray-700" />
+              </div>
+              <AppleButtonSecondary onClick={handleReset}>重置</AppleButtonSecondary>
+              <AppleButtonPrimary onClick={handleSearch}>查詢</AppleButtonPrimary>
+           </div>
+
+           <div className="mb-4 flex justify-between items-center">
+             <div>
+               <AppleButtonPrimary icon={Plus} onClick={() => openModal('addServiceRecord', c)}>新增服務費用</AppleButtonPrimary>
+             </div>
+             <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+           </div>
+
+           <div className="rounded-xl border border-gray-100 flex flex-col overflow-hidden">
+             <div className="overflow-x-auto">
+               <table className="w-full text-sm text-left min-w-[900px]">
+                  <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                    <tr>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">日期</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">服務類別</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">服務編號</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">名稱</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">數量</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">金額(MOP)</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">備註</th>
+                      <th className="py-3 px-4 font-medium text-center">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-gray-700">
+                    {paginationProps.currentData.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="py-4 px-4">{r.date}</td>
+                        <td className="py-4 px-4">{r.type}</td>
+                        <td className="py-4 px-4 text-xs text-gray-400 font-mono">{r.id}</td>
+                        <td className="py-4 px-4 font-medium">{r.name}</td>
+                        <td className="py-4 px-4">{r.qty}</td>
+                        <td className="py-4 px-4 font-medium">{r.amount}</td>
+                        <td className="py-4 px-4 text-gray-500 text-xs">{r.note}</td>
+                        <td className="py-4 px-4 text-center">
+                          <div className="flex justify-center gap-3 font-medium">
+                            <button className="text-blue-500 hover:text-blue-600 transition-colors" onClick={() => openModal('editServiceRecord', r)}>變更</button>
+                            <button className="text-red-500 hover:text-red-600 transition-colors" onClick={() => setDeleteTarget({ type: 'serviceRecord', record: r })}>刪除</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50/80 font-bold text-gray-900 border-t border-gray-200">
+                    <tr>
+                      <td colSpan="5" className="py-4 px-4 text-right text-gray-600">總金額 (MOP)：</td>
+                      <td colSpan="3" className="py-4 px-4 text-blue-600 text-base">{totalAmount}</td>
+                    </tr>
+                  </tfoot>
+               </table>
+             </div>
+             <PaginationFooter {...paginationProps} />
+           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const InventoryView = () => {
+    const [typeFilter, setTypeFilter] = useState('全部');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredInventory = services.filter(item => {
+      const matchType = typeFilter === '全部' || item.type === typeFilter;
+      
+      const normalizedSearchTerm = normalizeChinese(searchTerm);
+      const matchKeyword = !searchTerm || 
+        (item.id || '').includes(searchTerm) || 
+        (item.name || '').includes(normalizedSearchTerm);
+
+      return matchType && matchKeyword;
+    });
+
+    const paginationProps = usePagination(filteredInventory);
+
+    const handleReset = () => {
+      setTypeFilter('全部');
+      setSearchTerm('');
+    };
+
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['養老院管理', '庫存管理', '庫存概覽']} />
+
+        <div className="mb-4 flex justify-between items-center flex-wrap gap-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <AppleButtonPrimary icon={Plus} onClick={() => openModal('inventoryChangeBulk', null)}>新增庫存</AppleButtonPrimary>
+            
+            <div className="w-64">
+              <AppleInput label="查詢" placeholder="編號/名稱" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+
+            <div className="flex items-center gap-2 text-sm border border-gray-200 bg-white rounded-xl px-3 py-[7px] shadow-sm">
+              <span className="text-gray-500 font-medium whitespace-nowrap">服務類型</span>
+              <div className="relative w-24">
+                <select 
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="w-full bg-transparent outline-none appearance-none text-center pr-5 text-gray-800 font-medium cursor-pointer"
+                  style={{ textAlignLast: 'center' }}
+                >
+                  <option value="全部">全部</option>
+                  <option value="護理服務">護理服務</option>
+                  <option value="照顧服務">照顧服務</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleReset} 
+              className="bg-white border border-gray-200/80 text-gray-700 px-4 py-[7px] rounded-xl text-sm font-medium hover:bg-gray-50 active:bg-gray-100 transition-all shadow-sm"
+            >
+              重置
+            </button>
+          </div>
+          <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left min-w-[800px]">
+              <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-4 font-medium">服務編號</th>
+                  <th className="py-3 px-4 font-medium">服務名稱</th>
+                  <th className="py-3 px-4 font-medium">服務類型</th>
+                  <th className="py-3 px-4 font-medium">常用品</th>
+                  <th className="py-3 px-4 font-medium">庫存數量</th>
+                  <th className="py-3 px-4 font-medium text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-gray-700">
+                {paginationProps.currentData.map((item, i) => (
+                  <tr key={item.id || i} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-4 px-4 text-xs font-mono text-gray-500">{item.id}</td>
+                    <td className="py-4 px-4 font-medium">{item.name}</td>
+                    <td className="py-4 px-4">{item.type}</td>
+                    <td className="py-4 px-4">{item.isCommon}</td>
+                    <td className={`py-4 px-4 font-medium text-blue-600 ${item.stock === '無限' ? 'text-2xl leading-none' : 'text-base'}`}>{item.stock === '無限' ? '∞' : item.stock}</td>
+                    <td className="py-4 px-4 text-blue-500 text-center font-medium">
+                      <button className="hover:text-blue-600 mr-3 transition-colors" onClick={() => openModal('inventoryChangeSingle', item)}>變動</button>
+                      <button className="hover:text-blue-600 transition-colors" onClick={() => openModal('inventoryRecord', item)}>變動記錄</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter {...paginationProps} />
+        </div>
+      </div>
+    );
+  };
+
+  const ServicesView = () => {
+    const [typeFilter, setTypeFilter] = useState('全部');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredServices = services.filter(srv => {
+      const matchType = typeFilter === '全部' || srv.type === typeFilter;
+      
+      const normalizedSearchTerm = normalizeChinese(searchTerm);
+      const matchKeyword = !searchTerm || 
+        (srv.id || '').includes(searchTerm) || 
+        (srv.name || '').includes(normalizedSearchTerm);
+
+      return matchType && matchKeyword;
+    });
+
+    const paginationProps = usePagination(filteredServices);
+
+    const handleReset = () => {
+      setTypeFilter('全部');
+      setSearchTerm('');
+    };
+
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['養老院管理', '庫存管理', '服務管理']} />
+
+        <div className="mb-4 flex justify-between items-center flex-wrap gap-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <AppleButtonPrimary icon={Plus} onClick={() => openModal('addService', null)}>新增服務</AppleButtonPrimary>
+            
+            <div className="w-64">
+              <AppleInput label="查詢" placeholder="編號/名稱" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+
+            <div className="flex items-center gap-2 text-sm border border-gray-200 bg-white rounded-xl px-3 py-[7px] shadow-sm">
+              <span className="text-gray-500 font-medium whitespace-nowrap">服務類別</span>
+              <div className="relative w-24">
+                <select 
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="w-full bg-transparent outline-none appearance-none text-center pr-5 text-gray-800 font-medium cursor-pointer"
+                  style={{ textAlignLast: 'center' }}
+                >
+                  <option value="全部">全部</option>
+                  <option value="護理服務">護理服務</option>
+                  <option value="照顧服務">照顧服務</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleReset} 
+              className="bg-white border border-gray-200/80 text-gray-700 px-4 py-[7px] rounded-xl text-sm font-medium hover:bg-gray-50 active:bg-gray-100 transition-all shadow-sm"
+            >
+              重置
+            </button>
+          </div>
+          <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left min-w-[800px]">
+              <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-4 font-medium">服務編號</th>
+                  <th className="py-3 px-4 font-medium">服務名稱</th>
+                  <th className="py-3 px-4 font-medium">服務類型</th>
+                  <th className="py-3 px-4 font-medium">常用品</th>
+                  <th className="py-3 px-4 font-medium">服務單價(MOP)</th>
+                  <th className="py-3 px-4 font-medium text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-gray-700">
+                {paginationProps.currentData.map((srv, i) => (
+                  <tr key={srv.id || i} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-4 px-4 text-xs font-mono text-gray-500">{srv.id}</td>
+                    <td className="py-4 px-4 font-medium">{srv.name}</td>
+                    <td className="py-4 px-4">{srv.type}</td>
+                    <td className="py-4 px-4">{srv.isCommon}</td>
+                    <td className="py-4 px-4 font-medium text-gray-900">{formatCurrency(srv.price)}</td>
+                    <td className="py-4 px-4 text-center font-medium">
+                      <button className="text-blue-500 hover:text-blue-600 mr-3 transition-colors" onClick={() => openModal('editService', srv)}>修改</button>
+                      <button className="text-red-500 hover:text-red-600 transition-colors" onClick={() => setDeleteTarget({ type: 'service', id: srv.id })}>刪除</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter {...paginationProps} />
+        </div>
+      </div>
+    );
+  };
+
+  const BillsView = () => {
+    const [searchMonth, setSearchMonth] = useState('2026-03');
+
+    // 動態讀取客戶與服務記錄，即時計算聯動賬單
+    const generatedBills = customers.map(c => {
+      const monthRecords = serviceRecords.filter(r => r.customerId === c.id && r.date.startsWith(searchMonth));
+      const servicesTotal = monthRecords.reduce((sum, r) => sum + (parseFloat(String(r.amount || 0).replace(/,/g, '')) || 0), 0);
+      
+      const basicFee = parseFloat(String(c.basicFee || 0).replace(/,/g, '')) || 0;
+      const prepaid = parseFloat(String(c.balance || 0).replace(/,/g, '')) || 0;
+      const totalFee = basicFee + servicesTotal;
+      const debt = totalFee - prepaid;
+
+      return {
+        id: `B${searchMonth.replace('-', '')}${c.id.padStart(5, '0')}`,
+        customerId: c.id,
+        name: c.name,
+        month: searchMonth,
+        status: '待繳費',
+        amount: formatCurrency(totalFee),
+        debt: debt > 0 ? formatCurrency(debt) : '0.00',
+        date: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        basicFee: basicFee,
+        prepaid: prepaid
+      };
+    });
+
+    const paginationProps = usePagination(generatedBills);
+
+    const handleDownloadExcel = (bill) => {
+      // 重新取得該客戶當月服務記錄以獲取詳細日期與備註
+      const monthRecords = serviceRecords.filter(r => r.customerId === bill.customerId && r.date.startsWith(bill.month));
+      const servicesTotal = monthRecords.reduce((sum, r) => sum + (parseFloat(String(r.amount || 0).replace(/,/g, '')) || 0), 0);
+      const basicFee = parseFloat(String(bill.basicFee || 0).replace(/,/g, '')) || 0;
+      const prepaid = parseFloat(String(bill.prepaid || 0).replace(/,/g, '')) || 0;
+      const totalFee = basicFee + servicesTotal;
+      const amountPayable = totalFee - prepaid;
+
+      // 建立 CSV 內容 (\uFEFF 為 BOM，確保 Excel 中文不亂碼)
+      let csvContent = '\uFEFF';
+      csvContent += `頤安(逸麗)護老院 - 賬單明細\n\n`;
+      csvContent += `賬單編號,${bill.id}\n`;
+      csvContent += `住院號,${bill.customerId}\n`;
+      csvContent += `客戶姓名,${bill.name}\n`;
+      csvContent += `賬單月份,${bill.month}\n\n`;
+
+      csvContent += `日期,收費項目,服務名稱,金額(MOP),備註\n`;
+      csvContent += `,基本院費 (交下月院費),,${basicFee.toFixed(2)},\n`;
+
+      monthRecords.forEach(r => {
+        // 處理內容中可能包含逗號的問題
+        const safeName = `"${(r.name || '').replace(/"/g, '""')}"`;
+        const safeNote = `"${(r.note || '').replace(/"/g, '""')}"`;
+        const safeAmount = parseFloat(String(r.amount || 0).replace(/,/g, '')).toFixed(2);
+        csvContent += `${r.date},服務收費,${safeName},${safeAmount},${safeNote}\n`;
+      });
+
+      csvContent += `\n`;
+      csvContent += `費用合計,,,${totalFee.toFixed(2)},\n`;
+      csvContent += `預繳費用,,,-${prepaid.toFixed(2)},\n`;
+      csvContent += `應繳費用,,,${amountPayable.toFixed(2)},\n`;
+
+      // 觸發下載
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `賬單_${bill.customerId}_${bill.name}_${bill.month}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['養老院管理', '收費管理', '賬單管理']} />
+
+        <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 mb-6">
+          <div className="grid grid-cols-3 gap-6 mb-6">
+             <AppleInput label="賬單編號" placeholder="請輸入" />
+             <AppleInput label="住院號" placeholder="請輸入" />
+             <AppleInput label="客戶姓名" placeholder="請輸入" />
+             
+             <div className="flex items-center border border-gray-200 bg-gray-50/50 rounded-xl overflow-hidden shadow-sm text-sm">
+               <span className="text-gray-500 bg-gray-100/50 px-3 py-1.5 border-r border-gray-200/50 whitespace-nowrap">賬單狀態</span>
+               <select className="p-1.5 outline-none w-full bg-transparent text-gray-800 appearance-none px-3">
+                 <option>待繳費</option>
+                 <option>已繳費</option>
+               </select>
+             </div>
+
+             <div className="flex items-center border border-gray-200 bg-gray-50/50 rounded-xl overflow-hidden shadow-sm text-sm col-span-2">
+               <span className="text-gray-500 bg-gray-100/50 px-3 py-1.5 border-r border-gray-200/50 whitespace-nowrap">賬單月份</span>
+               <input type="month" value={searchMonth} onChange={e => setSearchMonth(e.target.value)} className="p-1.5 outline-none flex-1 bg-transparent text-gray-800 px-3" />
+               <span className="px-3 text-gray-400 bg-gray-100/30 py-1.5">至</span>
+               <input type="month" value={searchMonth} disabled className="p-1.5 outline-none flex-1 bg-transparent text-gray-400 px-3 cursor-not-allowed" />
+             </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+             <AppleButtonSecondary>重置</AppleButtonSecondary>
+             <AppleButtonPrimary>查詢</AppleButtonPrimary>
+          </div>
+        </div>
+
+        <div className="mb-4 flex justify-end">
+          <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left min-w-[1300px]">
+              <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">賬單編號</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">住院號</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">客戶姓名</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">賬單日期</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">賬單狀態</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">賬單費用(MOP)</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">欠繳費用(MOP)</th>
+                  <th className="py-3 px-4 font-medium whitespace-nowrap">發佈時間</th>
+                  <th className="py-3 px-4 font-medium text-center whitespace-nowrap">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-gray-700">
+                {paginationProps.currentData.map((bill, i) => (
+                  <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-4 px-4 text-xs font-mono text-gray-500">{bill.id}</td>
+                    <td className="py-4 px-4">{bill.customerId}</td>
+                    <td className="py-4 px-4 font-medium">{bill.name}</td>
+                    <td className="py-4 px-4">{bill.month}</td>
+                    <td className="py-4 px-4">
+                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-md text-xs font-medium">{bill.status}</span>
+                    </td>
+                    <td className="py-4 px-4 font-medium">{bill.amount}</td>
+                    <td className="py-4 px-4 font-medium text-red-500">{bill.debt}</td>
+                    <td className="py-4 px-4 text-xs text-gray-500">{bill.date}</td>
+                    <td className="py-4 px-4 text-blue-500 text-center font-medium">
+                      <div className="flex gap-3 justify-center">
+                        <button className="hover:text-blue-600 transition-colors" onClick={() => openModal('billDetails', bill)}>查看</button>
+                        <button className="hover:text-blue-600 transition-colors">繳費</button>
+                        <button className="hover:text-blue-600 transition-colors whitespace-nowrap">預繳費劃扣</button>
+                        <button className="hover:text-blue-600 transition-colors whitespace-nowrap" onClick={() => handleDownloadExcel(bill)}>下載賬單</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter {...paginationProps} />
+        </div>
+      </div>
+    );
+  };
+
+  const RoleManagementView = () => {
+    const paginationProps = usePagination(roles);
+
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['系統管理', '權限管理', '角色管理']} />
+        
+        <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 mb-6 flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-3 text-sm flex-1 max-w-xs">
+            <span className="text-gray-500 font-medium shrink-0">機構名稱</span>
+            <div className="relative w-full">
+              <AppleSelect options={['頤安(逸麗)護老院']} />
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+            </div>
+          </div>
+          <div className="flex-1 max-w-sm"><AppleInput label="角色名稱" placeholder="請輸入" /></div>
+          <div className="flex-1"></div>
+          <div className="flex gap-2">
+            <AppleButtonSecondary>重置</AppleButtonSecondary>
+            <AppleButtonPrimary>查詢</AppleButtonPrimary>
+          </div>
+        </div>
+
+        <div className="mb-4 flex justify-between items-center">
+          <div>
+            <AppleButtonPrimary onClick={() => setActiveMenu('新增角色')}>新增角色</AppleButtonPrimary>
+          </div>
+          <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left min-w-[800px]">
+              <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-4 font-medium">角色名稱</th>
+                  <th className="py-3 px-4 font-medium">角色編號</th>
+                  <th className="py-3 px-4 font-medium">所屬機構</th>
+                  <th className="py-3 px-4 font-medium">角色描述</th>
+                  <th className="py-3 px-4 font-medium text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-gray-700">
+                {paginationProps.currentData.map((role, i) => (
+                  <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-4 px-4 font-medium text-gray-900">{role.name}</td>
+                    <td className="py-4 px-4 text-gray-500 font-mono">{role.id}</td>
+                    <td className="py-4 px-4">{role.org}</td>
+                    <td className="py-4 px-4 text-gray-500">{role.desc}</td>
+                    <td className="py-4 px-4 text-blue-500 text-right font-medium">
+                      <div className="flex gap-4 justify-end">
+                        <button className="hover:text-blue-600 transition-colors" onClick={() => setActiveMenu('編輯角色')}>編輯</button>
+                        <button className="text-red-500 hover:text-red-600 transition-colors" onClick={() => setDeleteTarget({ type: 'role', id: role.id })}>刪除</button>
+                        <button className="hover:text-blue-600 transition-colors">調整</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter {...paginationProps} />
+        </div>
+      </div>
+    );
+  };
+
+  const RoleAddEditForm = ({ mode = 'add' }) => (
+    <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+      <Breadcrumb items={['系統管理', '權限管理', '角色管理']} />
+      <div className="bg-white p-10 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 min-h-[500px] flex justify-center">
+        <div className="w-full max-w-2xl">
+          <h2 className="text-2xl font-bold text-gray-900 mb-8 pb-4 border-b border-gray-100">{mode === 'add' ? '新增角色' : '編輯角色'}</h2>
+          
+          <div className="grid grid-cols-[140px_1fr] gap-y-6 text-sm items-center">
+            <span className="text-gray-500 text-right pr-6 font-medium">所屬機構</span>
+            <span className="text-gray-900 font-medium">頤安(逸麗)護老院</span>
+
+            <span className="text-gray-500 text-right pr-6 font-medium">{mode === 'add' && <span className="text-red-500">* </span>}角色編號</span>
+            {mode === 'add' ? (
+              <input type="text" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+            ) : (
+              <span className="text-gray-900 font-mono">AM01</span>
+            )}
+
+            <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>角色名稱</span>
+            <input type="text" defaultValue={mode === 'edit' ? "院長" : ""} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+            <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>角色級別</span>
+            <label className="flex items-center gap-2 cursor-pointer w-fit">
+              <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-500 rounded-md border-gray-300 focus:ring-blue-500 focus:ring-2" />
+              <span className="text-gray-800">本級機構</span>
+            </label>
+
+            <span className="text-gray-500 text-right pr-6 font-medium">角色種類</span>
+            <div className="relative w-48">
+              <select className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2 outline-none w-full appearance-none text-gray-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" defaultValue={mode === 'edit' ? "管理員" : "普通角色"}>
+                <option>普通角色</option>
+                <option>管理員</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+            </div>
+
+            <span className="text-gray-500 text-right pr-6 self-start mt-3 font-medium">角色描述</span>
+            <textarea className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-3 outline-none w-full h-32 resize-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"></textarea>
+            
+            <div className="col-start-2 flex gap-3 mt-8">
+              <AppleButtonPrimary>確定</AppleButtonPrimary>
+              {mode === 'edit' && <AppleButtonSecondary>重置</AppleButtonSecondary>}
+              <AppleButtonSecondary onClick={() => setActiveMenu('角色管理')}>{mode === 'add' ? '取消' : '返回'}</AppleButtonSecondary>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const RoleAddView = () => <RoleAddEditForm mode="add" />;
+  const RoleEditView = () => <RoleAddEditForm mode="edit" />;
+
+  const UserManagementView = () => {
+    const paginationProps = usePagination(users);
+
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['系統管理', '權限管理', '用戶管理']} />
+        
+        <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 mb-6 flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-3 text-sm flex-1 max-w-xs">
+            <span className="text-gray-500 font-medium shrink-0">機構名稱</span>
+            <div className="relative w-full">
+              <AppleSelect options={['頤安(逸麗)護老院']} />
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+            </div>
+          </div>
+          <div className="flex-1 max-w-sm"><AppleInput label="用戶名稱" placeholder="請輸入" /></div>
+          <div className="flex-1"></div>
+          <div className="flex gap-2">
+            <AppleButtonSecondary>重置</AppleButtonSecondary>
+            <AppleButtonPrimary>查詢</AppleButtonPrimary>
+          </div>
+        </div>
+
+        <div className="mb-4 flex justify-between items-center">
+          <div>
+            <AppleButtonPrimary onClick={() => setActiveMenu('編輯用戶')}>新增用戶</AppleButtonPrimary>
+          </div>
+          <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left min-w-[800px]">
+              <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-4 font-medium">用戶名稱</th>
+                  <th className="py-3 px-4 font-medium">用戶編號</th>
+                  <th className="py-3 px-4 font-medium">用戶狀態</th>
+                  <th className="py-3 px-4 font-medium">默認角色</th>
+                  <th className="py-3 px-4 font-medium text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-gray-700">
+                {paginationProps.currentData.map((user, i) => (
+                  <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-4 px-4 font-medium text-gray-900">{user.name}</td>
+                    <td className="py-4 px-4 text-gray-500 font-mono">{user.id}</td>
+                    <td className="py-4 px-4">
+                       <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium">{user.status}</span>
+                    </td>
+                    <td className="py-4 px-4 text-gray-600">{user.role}</td>
+                    <td className="py-4 px-4 text-blue-500 text-right font-medium">
+                      <div className="flex gap-4 justify-end">
+                        <button className="hover:text-blue-600 transition-colors" onClick={() => setActiveMenu('編輯用戶')}>編輯</button>
+                        <button className="text-red-500 hover:text-red-600 transition-colors" onClick={() => setDeleteTarget({ type: 'user', id: user.id })}>刪除</button>
+                        <button className="hover:text-blue-600 transition-colors">重置密碼</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PaginationFooter {...paginationProps} />
+        </div>
+      </div>
+    );
+  };
+
+  const UserEditView = () => {
+    const [step, setStep] = useState(1);
+    
+    return (
+      <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7]">
+        <Breadcrumb items={['系統管理', '權限管理', '用戶管理']} />
+        
+        <div className="bg-white p-10 rounded-2xl shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100 min-h-[600px] flex flex-col items-center">
+          
+          {/* Progress Indicator - Apple Style Segmented look */}
+          <div className="flex items-center justify-between w-full max-w-3xl mb-14 mt-4 relative">
+            <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 rounded-full -translate-y-1/2 z-0"></div>
+            <div className="absolute top-1/2 left-0 h-1 bg-blue-500 rounded-full -translate-y-1/2 z-0 transition-all duration-500" style={{ width: step === 1 ? '0%' : step === 2 ? '50%' : '100%' }}></div>
+            
+            {[1, 2, 3].map((num) => (
+              <div key={num} className="relative z-10 flex flex-col items-center gap-3 bg-white px-2 cursor-default">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-sm transition-all duration-300 ${step >= num ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}>
+                  {step > num ? '✓' : num}
+                </div>
+                <span className={`text-sm font-medium transition-colors ${step >= num ? 'text-gray-900' : 'text-gray-400'}`}>
+                  {num === 1 ? '基本信息' : num === 2 ? '權限與角色' : '補充信息'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Form Content */}
+          <div className="w-full max-w-3xl flex-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {step === 1 && (
+              <div className="grid grid-cols-[120px_1fr] gap-y-8 text-sm items-center">
+                <span className="text-gray-500 text-right pr-6 font-medium">機構名稱</span>
+                <span className="text-gray-900 font-medium">頤安(逸麗)護老院</span>
+
+                <span className="text-gray-500 text-right pr-6 font-medium">用戶編號</span>
+                <span className="text-gray-900 font-mono">203012</span>
+
+                <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>用戶名稱</span>
+                <input type="text" defaultValue="王小華 入生命體徵健康照護員" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+                <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>用戶狀態</span>
+                <div className="relative">
+                  <select className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full appearance-none text-gray-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all">
+                    <option>激活</option>
+                    <option>停用</option>
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                </div>
+
+                <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>手機號碼</span>
+                <input type="text" defaultValue="65620522" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+                <div className="col-start-2 flex gap-3 mt-8 pt-6 border-t border-gray-100">
+                  <AppleButtonPrimary onClick={() => setActiveMenu('用戶管理')}>提交</AppleButtonPrimary>
+                  <AppleButtonSecondary onClick={() => setStep(2)}>下一步</AppleButtonSecondary>
+                  <AppleButtonSecondary onClick={() => setActiveMenu('用戶管理')}>取消</AppleButtonSecondary>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="grid grid-cols-[120px_1fr] gap-y-8 text-sm">
+                <span className="text-gray-500 text-right pr-6 mt-3 font-medium">用戶關聯角色</span>
+                <div className="flex items-center gap-6 h-72">
+                  {/* Left List */}
+                  <div className="border border-gray-200 rounded-2xl w-72 h-full flex flex-col bg-gray-50/30 overflow-hidden shadow-sm">
+                    <div className="bg-gray-100/80 px-4 py-3 border-b border-gray-200 flex justify-between text-gray-700 font-medium text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded-sm text-blue-500 focus:ring-blue-500"/> 未選列表</label>
+                      <span className="text-gray-500">0/4</span>
+                    </div>
+                    <div className="p-3 flex flex-col gap-1 overflow-y-auto">
+                      {['院長', '護士', '活動協調員', '助理'].map(role => (
+                        <label key={role} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors text-gray-700">
+                          <input type="checkbox" className="rounded-sm text-blue-500 focus:ring-blue-500"/> {role}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex flex-col gap-3">
+                    <button className="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50 shadow-sm transition-all active:scale-95">
+                      <ChevronRight size={18} />
+                    </button>
+                    <button className="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50 shadow-sm transition-all active:scale-95">
+                      <ChevronRight size={18} className="rotate-180" />
+                    </button>
+                  </div>
+
+                  {/* Right List */}
+                  <div className="border border-gray-200 rounded-2xl w-72 h-full flex flex-col bg-gray-50/30 overflow-hidden shadow-sm">
+                    <div className="bg-gray-100/80 px-4 py-3 border-b border-gray-200 flex justify-between text-gray-700 font-medium text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded-sm text-blue-500 focus:ring-blue-500"/> 已選列表</label>
+                      <span className="text-gray-500">0/1</span>
+                    </div>
+                    <div className="p-3 flex flex-col gap-1 overflow-y-auto">
+                       <label className="flex items-center gap-3 p-2 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05)] rounded-lg cursor-pointer text-gray-900 font-medium border border-gray-100">
+                          <input type="checkbox" className="rounded-sm text-blue-500 focus:ring-blue-500"/> 入生命體徵健康照護員
+                        </label>
+                    </div>
+                  </div>
+                </div>
+
+                <span className="text-gray-500 text-right pr-6 items-center flex justify-end font-medium">用戶默認角色</span>
+                <div className="relative w-72">
+                  <select className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full appearance-none text-gray-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all">
+                    <option>入生命體徵健康照護員</option>
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                </div>
+
+                <div className="col-start-2 flex gap-3 mt-8 pt-6 border-t border-gray-100">
+                  <AppleButtonPrimary onClick={() => setActiveMenu('用戶管理')}>提交</AppleButtonPrimary>
+                  <AppleButtonSecondary onClick={() => setStep(3)}>下一步</AppleButtonSecondary>
+                  <AppleButtonSecondary onClick={() => setStep(1)}>上一步</AppleButtonSecondary>
+                  <AppleButtonSecondary onClick={() => setActiveMenu('用戶管理')}>取消</AppleButtonSecondary>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="grid grid-cols-[120px_1fr] gap-y-6 text-sm items-center">
+                <span className="text-gray-500 text-right pr-6 font-medium">用戶描述</span>
+                <input type="text" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+                <span className="text-gray-500 text-right pr-6 font-medium">電子郵箱</span>
+                <input type="email" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+                <span className="text-gray-500 text-right pr-6 font-medium">聯繫地址</span>
+                <input type="text" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+                <span className="text-gray-500 text-right pr-6 font-medium">郵遞區號</span>
+                <input type="text" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all" />
+
+                <div className="col-start-2 flex gap-3 mt-8 pt-6 border-t border-gray-100">
+                  <AppleButtonPrimary onClick={() => setActiveMenu('用戶管理')}>提交</AppleButtonPrimary>
+                  <AppleButtonSecondary onClick={() => setStep(2)}>上一步</AppleButtonSecondary>
+                  <AppleButtonSecondary onClick={() => setActiveMenu('用戶管理')}>取消</AppleButtonSecondary>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalDetails = () => {
+    const currentCustomer = customers.find(c => c.id === selectedCustomer?.id) || selectedCustomer;
+    if (!currentCustomer) return null;
+
+    const currentIndex = customers.findIndex(c => c.id === currentCustomer.id);
+    const hasPrev = currentIndex > 0;
+    const hasNext = currentIndex < customers.length - 1;
+
+    const handlePrev = () => {
+      if (hasPrev) setSelectedCustomer(customers[currentIndex - 1]);
+    };
+
+    const handleNext = () => {
+      if (hasNext) setSelectedCustomer(customers[currentIndex + 1]);
+    };
+
+    // 取得家屬資料或給予預設值
+    const familyData = currentCustomer.family ? currentCustomer.family : [{ name: '李小惠', phone: '0912111222', isMain: true }];
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[850px] max-h-[90vh] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">入院詳情</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8 overflow-y-auto flex-1">
+            <div className="flex justify-end mb-8 gap-3">
+              <AppleButtonSecondary onClick={handlePrev} disabled={!hasPrev}>上一個</AppleButtonSecondary>
+              <AppleButtonSecondary onClick={handleNext} disabled={!hasNext}>下一個</AppleButtonSecondary>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-y-6 text-sm bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">住院號</span><span className="font-medium text-gray-900">{currentCustomer.id}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">客戶姓名</span><span className="font-medium text-gray-900">{currentCustomer.name}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">性別</span><span className="font-medium text-gray-900">{currentCustomer.gender}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">身份證號</span><span className="font-mono text-gray-900">{currentCustomer.idCard}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">住址</span><span className="font-medium text-gray-900">頤安(逸麗)護老院</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">床位號</span><span className="font-medium text-gray-900">{currentCustomer.bed}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">電話</span><span className="font-mono text-gray-900">{currentCustomer.phone}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">出生日期</span><span className="font-medium text-gray-900">{currentCustomer.birth}</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">基本院費</span><span className="font-medium text-gray-900">{parseFloat(currentCustomer.basicFee || 0).toFixed(2)} MOP</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">社工局津助</span><span className="font-medium text-gray-900">{parseFloat(currentCustomer.subsidy || 0).toFixed(2)} MOP</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">按金金額</span><span className="font-medium text-gray-900">{parseFloat(currentCustomer.deposit || 0).toFixed(2)} MOP</span></div>
+              <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">入院日期</span><span className="font-medium text-gray-900">{currentCustomer.admissionDate || '2025-04-09'}</span></div>
+            </div>
+
+            <h3 className="text-base font-bold text-gray-900 mt-8 mb-4 px-2">家屬聯絡資訊</h3>
+            
+            {familyData.length === 0 ? (
+              <div className="text-sm text-gray-500 px-2 mb-6">暫無家屬聯絡資訊</div>
+            ) : (
+              familyData.map((member, index) => (
+                <div key={index} className="mb-6">
+                  <div className="grid grid-cols-2 gap-y-6 text-sm mb-4 px-2">
+                      <div className="flex items-center"><span className="w-24 text-right pr-6 text-gray-500">家屬{index + 1}姓名</span><span className="font-medium text-gray-900">{member.name}</span></div>
+                      <div className="flex items-center">
+                        <span className="w-24 text-right pr-6 text-gray-500">家屬{index + 1}手機</span>
+                        <div className="flex justify-between items-center flex-1">
+                          <span className="font-mono font-medium text-gray-900">{member.phone}</span>
+                          <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 text-xs font-bold rounded-lg transition-colors">客戶端授權</button>
+                        </div>
+                      </div>
+                  </div>
+                  
+                  <div className="ml-[104px] text-xs text-gray-500 flex items-center gap-2">
+                    <input type="radio" checked={member.isMain} readOnly className="text-blue-500 focus:ring-blue-500 h-4 w-4" /> 
+                    <span>主聯繫人 (只可以設定一個聯繫人為主聯繫人)</span>
+                  </div>
+                </div>
+              ))
+            )}
+
+            <div className="flex text-sm px-2 mt-4">
+              <span className="w-24 text-right pr-6 text-gray-500 pt-2">備註</span>
+              <div className="bg-gray-50 flex-1 h-24 rounded-2xl border border-gray-200/60 p-4 text-gray-500">{currentCustomer.note || '無特別備註'}</div>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end">
+            <AppleButtonSecondary onClick={closeModal}>關閉</AppleButtonSecondary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalEdit = () => {
+    const isAddMode = modalType === 'add';
+    
+    const [formData, setFormData] = useState(() => {
+      if (isAddMode) {
+        return {
+          id: String(Math.floor(Math.random() * 100000)),
+          careId: '2003',
+          name: '',
+          bed: '',
+          gender: '男',
+          idCard: '',
+          birth: '',
+          balance: '0.00',
+          basicFee: '9900.00',
+          subsidy: '0.00',
+          deposit: '0.00',
+          admissionDate: new Date().toISOString().split('T')[0],
+          phone: '',
+          status: '在院',
+          note: '',
+          family: [{ name: '', phone: '', isMain: true }]
+        };
+      }
+      return { 
+        ...selectedCustomer,
+        basicFee: selectedCustomer.basicFee || '9900.00',
+        subsidy: selectedCustomer.subsidy || '0.00',
+        deposit: selectedCustomer.deposit || '0.00',
+        admissionDate: selectedCustomer.admissionDate || '2025-04-09',
+        family: selectedCustomer.family && selectedCustomer.family.length > 0 
+                  ? selectedCustomer.family 
+                  : [{ name: '', phone: '', isMain: true }],
+        note: selectedCustomer.note || ''
+      };
+    });
+
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleFamilyChange = (index, field, value) => {
+      const newFamily = [...formData.family];
+      newFamily[index][field] = value;
+      setFormData(prev => ({ ...prev, family: newFamily }));
+    };
+
+    const handleAddFamily = () => {
+      setFormData(prev => ({
+        ...prev,
+        family: [...prev.family, { name: '', phone: '', isMain: false }]
+      }));
+    };
+
+    const handleSetMainContact = (index) => {
+      const newFamily = formData.family.map((member, i) => ({
+        ...member,
+        isMain: i === index
+      }));
+      setFormData(prev => ({ ...prev, family: newFamily }));
+    };
+
+    const handleRemoveFamily = (index) => {
+      setFormData(prev => {
+        const newFamily = prev.family.filter((_, i) => i !== index);
+        // 如果刪除了主聯繫人且還有其他家屬，將第一位設為主聯繫人
+        if (newFamily.length > 0 && prev.family[index].isMain) {
+          newFamily[0].isMain = true;
+        }
+        return { ...prev, family: newFamily };
+      });
+    };
+
+    const handleSave = () => {
+      // 儲存前過濾掉完全空白的家屬欄位
+      const cleanedFamily = formData.family.filter(m => m.name.trim() !== '' || m.phone.trim() !== '');
+      if (cleanedFamily.length > 0 && !cleanedFamily.some(m => m.isMain)) {
+        cleanedFamily[0].isMain = true;
+      }
+
+      const finalData = { ...formData, family: cleanedFamily };
+
+      if (isAddMode) {
+        setCustomers(prev => [finalData, ...prev]);
+      } else {
+        setCustomers(prev => prev.map(c => c.id === finalData.id ? finalData : c));
+      }
+      closeModal();
+    };
+
+    if (!selectedCustomer && !isAddMode) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[950px] max-h-[90vh] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">{isAddMode ? '入院新增' : '入院修改'}</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8 overflow-y-auto flex-1">
+            <div className="grid grid-cols-2 gap-x-12 gap-y-6 text-sm">
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium">住院號</span>
+                <input type="text" disabled defaultValue={formData.id} className="flex-1 border border-transparent bg-gray-100/80 p-2.5 rounded-xl text-gray-500 cursor-not-allowed font-mono" />
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium"><span className="text-red-500">* </span>客戶姓名</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="text" name="name" value={formData.name || ''} onChange={handleChange} className="w-full p-2.5 outline-none bg-transparent" />
+                  <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">{formData.name.length}/100</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium"><span className="text-red-500">* </span>性別</span>
+                <div className="flex-1 flex gap-6 bg-gray-50/50 p-2.5 rounded-xl border border-gray-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="gender" value="男" checked={formData.gender === '男'} onChange={handleChange} className="w-4 h-4 text-blue-500 focus:ring-blue-500"/> 男
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="gender" value="女" checked={formData.gender === '女'} onChange={handleChange} className="w-4 h-4 text-blue-500 focus:ring-blue-500"/> 女
+                  </label>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium"><span className="text-red-500">* </span>身份證號</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="text" name="idCard" value={formData.idCard || ''} onChange={handleChange} className="w-full p-2.5 outline-none bg-transparent font-mono" />
+                  <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">10/20</span>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium"><span className="text-red-500">* </span>住址</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="text" defaultValue="頤安(逸麗)護老院" className="w-full p-2.5 outline-none bg-transparent" />
+                  <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">9/100</span>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium"><span className="text-red-500">* </span>床位號</span>
+                <div className="flex-1 flex gap-3">
+                  <input type="text" name="bed" value={formData.bed || ''} onChange={handleChange} className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50/50 focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm" />
+                  <AppleButtonSecondary>床位更換</AppleButtonSecondary>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium"><span className="text-red-500">* </span>電話</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="text" name="phone" value={formData.phone || ''} onChange={handleChange} className="w-full p-2.5 outline-none bg-transparent font-mono" />
+                  <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">10/20</span>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium">出生日期</span>
+                <input type="date" name="birth" value={formData.birth || ''} onChange={handleChange} className="flex-1 border border-gray-200 bg-gray-50/50 p-2.5 rounded-xl text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm" />
+              </div>
+
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium">基本院費</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="number" name="basicFee" value={formData.basicFee || ''} onChange={handleChange} className="w-full p-2.5 outline-none bg-transparent" />
+                  <span className="text-gray-500 px-4 bg-white border-l border-gray-100 py-2.5 font-medium">MOP</span>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium">社工局津助</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="number" name="subsidy" value={formData.subsidy || ''} onChange={handleChange} className="w-full p-2.5 outline-none bg-transparent" />
+                  <span className="text-gray-500 px-4 bg-white border-l border-gray-100 py-2.5 font-medium">MOP</span>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium">按金金額</span>
+                <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                  <input type="number" name="deposit" value={formData.deposit || ''} onChange={handleChange} placeholder="請輸入按金金額" className="w-full p-2.5 outline-none bg-transparent" />
+                  <span className="text-gray-500 px-4 bg-white border-l border-gray-100 py-2.5 font-medium">MOP</span>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 text-right pr-4 text-gray-500 font-medium">入院日期</span>
+                <input type="date" name="admissionDate" value={formData.admissionDate || ''} onChange={handleChange} className="flex-1 border border-gray-200 bg-gray-50/50 p-2.5 rounded-xl text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm" />
+              </div>
+            </div>
+
+            <h3 className="text-base font-bold text-gray-900 mt-10 mb-6 px-2 border-b border-gray-100 pb-2">家屬聯絡資訊</h3>
+            
+            {formData.family.map((member, index) => (
+              <div key={index} className="mb-6">
+                <div className="grid grid-cols-2 gap-x-12 gap-y-6 text-sm mb-4 px-2">
+                    <div className="flex items-center">
+                      <span className="w-24 text-right pr-4 text-gray-500 font-medium">家屬{index + 1}姓名</span>
+                      <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                      <input type="text" value={member.name} onChange={(e) => handleFamilyChange(index, 'name', e.target.value)} className="w-full p-2.5 outline-none bg-transparent" />
+                      <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">{member.name.length}/20</span>
+                    </div>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="w-24 text-right pr-4 text-gray-500 font-medium">家屬{index + 1}手機</span>
+                      <div className="flex-1 flex gap-3">
+                        <div className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                          <input type="text" value={member.phone} onChange={(e) => handleFamilyChange(index, 'phone', e.target.value)} className="w-full p-2.5 outline-none bg-transparent font-mono" />
+                          <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">{member.phone.length}/20</span>
+                        </div>
+                        {index === formData.family.length - 1 && (
+                          <AppleButtonSecondary onClick={handleAddFamily}>新增</AppleButtonSecondary>
+                        )}
+                        <button type="button" onClick={() => handleRemoveFamily(index)} className="text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 whitespace-nowrap border border-transparent hover:border-red-100">
+                          刪除
+                        </button>
+                      </div>
+                    </div>
+                </div>
+                
+                <div className="ml-[108px] text-xs text-gray-500 flex items-center gap-2">
+                  <input type="radio" name={`mainContact_${formData.id}`} checked={member.isMain} onChange={() => handleSetMainContact(index)} className="text-blue-500 focus:ring-blue-500 h-4 w-4" /> 
+                  <span>主聯繫人 (只可以設定一個聯繫人為主聯繫人)</span>
+                </div>
+              </div>
+            ))}
+
+            {formData.family.length === 0 && (
+              <div className="mb-6 px-2 ml-[108px]">
+                <AppleButtonSecondary onClick={handleAddFamily}>新增家屬聯絡資訊</AppleButtonSecondary>
+              </div>
+            )}
+
+            <div className="flex text-sm px-2 mt-4">
+              <span className="w-24 text-right pr-4 text-gray-500 pt-2 font-medium">備註</span>
+              <textarea name="note" value={formData.note} onChange={handleChange} className="flex-1 border border-gray-200 bg-gray-50/50 rounded-xl p-3 h-28 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm resize-none" placeholder="請輸入備註"></textarea>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+            <AppleButtonSecondary onClick={closeModal}>取消</AppleButtonSecondary>
+            <AppleButtonPrimary onClick={handleSave}>確定儲存</AppleButtonPrimary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalService = () => {
+    const isAddMode = modalType === 'addService';
+    
+    const getNextId = (type) => {
+      const prefix = type === '護理服務' ? 'M' : 'C';
+      const nums = services
+        .filter(s => s.id.startsWith(prefix))
+        .map(s => parseInt(s.id.slice(1), 10))
+        .filter(n => !isNaN(n));
+      const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
+      return prefix + String(maxNum + 1).padStart(3, '0');
+    };
+
+    const [formData, setFormData] = useState(() => {
+      if (isAddMode) {
+        return {
+          id: getNextId('護理服務'),
+          type: '護理服務',
+          name: '',
+          price: '',
+          isCommon: '是',
+          stock: 0
+        };
+      }
+      return { 
+        ...selectedCustomer,
+        price: selectedCustomer.price ? formatCurrency(selectedCustomer.price) : ''
+      }; 
+    });
+
+    useEffect(() => {
+      if (isAddMode) {
+        setFormData(prev => ({ ...prev, id: getNextId(prev.type) }));
+      }
+    }, [formData.type, isAddMode]);
+
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handlePriceBlur = () => {
+      if (formData.price) {
+        setFormData(prev => ({ ...prev, price: formatCurrency(prev.price) }));
+      }
+    };
+
+    const handleSave = () => {
+      // 儲存前過濾掉逗號，並轉回純數字字串，避免影響後續計算
+      const cleanPrice = formData.price.toString().replace(/,/g, '');
+      const parsedPrice = parseFloat(cleanPrice);
+      const finalPrice = isNaN(parsedPrice) ? '0.00' : parsedPrice.toFixed(2);
+      
+      const finalData = { ...formData, price: finalPrice };
+
+      if (isAddMode) {
+        setServices(prev => [finalData, ...prev]);
+      } else {
+        setServices(prev => prev.map(s => s.id === finalData.id ? finalData : s));
+      }
+      closeModal();
+    };
+
+    if (!isAddMode && !selectedCustomer) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[600px] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">{isAddMode ? '新增服務' : '修改服務'}</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8">
+            <div className="grid grid-cols-[100px_1fr] gap-y-6 text-sm items-center">
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>服務類型</span>
+              <div className="relative">
+                <select name="type" value={formData.type} onChange={handleChange} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full appearance-none text-gray-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all">
+                  <option value="護理服務">護理服務</option>
+                  <option value="照顧服務">照顧服務</option>
+                </select>
+                <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+              </div>
+
+              <span className="text-gray-500 text-right pr-6 font-medium">服務編號</span>
+              <input type="text" disabled value={formData.id} className="w-full border border-transparent bg-gray-100/80 p-2.5 rounded-xl text-gray-800 cursor-not-allowed font-mono shadow-inner font-bold" />
+
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>服務名稱</span>
+              <div className="border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full p-2.5 outline-none bg-transparent" />
+                <span className="text-gray-400 text-xs px-3 bg-white border-l border-gray-100 py-3">{formData.name.length}/100</span>
+              </div>
+
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>單價</span>
+              <div className="border border-gray-200 bg-gray-50/50 rounded-xl flex items-center overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all shadow-sm">
+                <input type="text" name="price" placeholder="請輸入" value={formData.price} onChange={handleChange} onBlur={handlePriceBlur} className="w-full p-2.5 outline-none bg-transparent" />
+                <span className="text-gray-500 px-4 bg-white border-l border-gray-100 py-2.5 font-medium">MOP</span>
+              </div>
+
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>常用服務</span>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="isCommon" value="否" checked={formData.isCommon === '否'} onChange={handleChange} className="w-4 h-4 text-blue-500 focus:ring-blue-500"/> 否
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="isCommon" value="是" checked={formData.isCommon === '是'} onChange={handleChange} className="w-4 h-4 text-blue-500 focus:ring-blue-500"/> 是
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+            <AppleButtonSecondary onClick={closeModal}>取消</AppleButtonSecondary>
+            <AppleButtonPrimary onClick={handleSave}>確認</AppleButtonPrimary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalConfirmDelete = () => {
+    if (!deleteTarget) return null;
+
+    const handleConfirm = () => {
+      const { type, id, record } = deleteTarget;
+      if (type === 'service') {
+        setServices(prev => prev.filter(s => s.id !== id));
+      } else if (type === 'role') {
+        setRoles(prev => prev.filter(r => r.id !== id));
+      } else if (type === 'user') {
+        setUsers(prev => prev.filter(u => u.id !== id));
+      } else if (type === 'serviceRecord') {
+        // 刪除服務記錄並返還庫存
+        setServiceRecords(prev => prev.filter(r => r.recordId !== record.recordId));
+        
+        const srv = services.find(s => s.id === record.id);
+        if (srv && srv.stock !== '無限') {
+          setServices(prev => prev.map(s => s.id === srv.id ? { ...s, stock: s.stock + record.qty } : s));
+          setInventoryRecords(prev => [{
+            id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+            itemId: srv.id,
+            date: new Date().toISOString().split('T')[0] + ' 00:00:00',
+            type: srv.type,
+            reason: '客戶服務記錄刪除(庫存返還)',
+            qty: record.qty
+          }, ...prev]);
+        }
+      }
+      setDeleteTarget(null);
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[60] animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[400px] flex flex-col overflow-hidden border border-white/40 p-8 text-center">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <X size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">確認刪除</h2>
+          <p className="text-gray-500 mb-8 text-sm">此操作無法復原，您確定要刪除這筆資料嗎？</p>
+          <div className="flex gap-3 justify-center">
+            <AppleButtonSecondary onClick={() => setDeleteTarget(null)}>取消</AppleButtonSecondary>
+            <button 
+              onClick={handleConfirm} 
+              className="bg-red-500 text-white px-6 py-2 rounded-xl text-sm font-medium hover:bg-red-600 active:bg-red-700 active:scale-[0.98] transition-all shadow-sm"
+            >
+              確認刪除
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalNotAvailable = () => {
+    if (modalType !== 'notAvailable') return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[60] animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[350px] flex flex-col overflow-hidden border border-white/40 p-8 text-center">
+          <h2 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">提示</h2>
+          <p className="text-gray-500 mb-8 text-sm">此功能尚未開放</p>
+          <div className="flex justify-center">
+            <button 
+              onClick={closeModal} 
+              className="bg-blue-500 text-white px-8 py-2 rounded-xl text-sm font-medium hover:bg-blue-600 active:bg-blue-700 active:scale-[0.98] transition-all shadow-sm w-full"
+            >
+              確認
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalServiceRecordAdd = () => {
+    const [formData, setFormData] = useState(() => {
+      const today = new Date().toISOString().split('T')[0];
+      return {
+        date: today,
+        serviceId: '',
+        qty: 1,
+        note: ''
+      };
+    });
+
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleQtyChange = (delta) => {
+      setFormData(prev => ({ ...prev, qty: Math.max(1, prev.qty + delta) }));
+    };
+
+    const handleSave = () => {
+      if (!formData.serviceId) return;
+
+      const selectedSrv = services.find(s => s.id === formData.serviceId);
+      if (!selectedSrv) return;
+
+      const priceNum = parseFloat(String(selectedSrv.price || 0).replace(/,/g, '')) || 0;
+
+      const newRecord = {
+        recordId: 'SR' + Date.now() + Math.floor(Math.random() * 1000),
+        customerId: selectedCustomer.id,
+        date: formData.date,
+        type: selectedSrv.type,
+        id: selectedSrv.id,
+        name: selectedSrv.name,
+        qty: formData.qty,
+        amount: formatCurrency(priceNum * formData.qty),
+        note: formData.note
+      };
+
+      setServiceRecords(prev => [newRecord, ...prev]);
+      
+      // 同步扣除庫存數量 (若為無限則不扣除)
+      setServices(prev => prev.map(srv => 
+        srv.id === selectedSrv.id ? { ...srv, stock: srv.stock === '無限' ? '無限' : srv.stock - formData.qty } : srv
+      ));
+
+      // 同步寫入庫存變動記錄
+      const newInventoryRecord = {
+        id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+        itemId: selectedSrv.id,
+        date: formData.date + ' 00:00:00',
+        type: selectedSrv.type,
+        reason: '客戶服務使用扣除',
+        qty: -formData.qty
+      };
+      setInventoryRecords(prev => [newInventoryRecord, ...prev]);
+
+      closeModal();
+    };
+
+    if (modalType !== 'addServiceRecord') return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[700px] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">客戶服務新增</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8">
+            <div className="grid grid-cols-[100px_1fr] gap-y-6 text-sm items-center">
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>日期</span>
+              <input type="date" name="date" value={formData.date} onChange={handleChange} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-[200px] focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all text-gray-800" />
+
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>服務名稱</span>
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1">
+                  <select name="serviceId" value={formData.serviceId} onChange={handleChange} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full appearance-none text-gray-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all">
+                    <option value="">請選擇</option>
+                    {services.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({formatCurrency(s.price)} MOP)</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500 font-medium">數量</span>
+                  <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50/50 overflow-hidden">
+                    <button type="button" onClick={() => handleQtyChange(-1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-200/50 transition-colors font-bold">-</button>
+                    <input type="text" readOnly value={formData.qty} className="w-12 text-center bg-transparent text-gray-800 font-medium outline-none" />
+                    <button type="button" onClick={() => handleQtyChange(1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-200/50 transition-colors font-bold">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <span className="text-gray-500 text-right pr-6 self-start mt-3 font-medium">備註</span>
+              <textarea name="note" value={formData.note} onChange={handleChange} placeholder="請輸入備註" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-3 outline-none w-full h-32 resize-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"></textarea>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+            <AppleButtonSecondary onClick={closeModal}>取消</AppleButtonSecondary>
+            <AppleButtonPrimary onClick={handleSave}>確定</AppleButtonPrimary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalServiceRecordEdit = () => {
+    const record = selectedCustomer; // 編輯模式下，selectedCustomer 裝載的是該筆服務記錄
+    const [formData, setFormData] = useState({
+      date: '',
+      serviceId: '',
+      qty: 1,
+      note: ''
+    });
+
+    useEffect(() => {
+      if (modalType === 'editServiceRecord' && record) {
+        setFormData({
+          date: record.date || '',
+          serviceId: record.id || '',
+          qty: record.qty || 1,
+          note: record.note || ''
+        });
+      }
+    }, [modalType, record]);
+
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleQtyChange = (delta) => {
+      setFormData(prev => ({ ...prev, qty: Math.max(1, prev.qty + delta) }));
+    };
+
+    const handleSave = () => {
+      if (!formData.serviceId) return;
+
+      const newSrv = services.find(s => s.id === formData.serviceId);
+      const oldSrv = services.find(s => s.id === record.id);
+      if (!newSrv) return;
+
+      const priceNum = parseFloat(String(newSrv.price || 0).replace(/,/g, '')) || 0;
+
+      const updatedRecord = {
+        ...record,
+        date: formData.date,
+        type: newSrv.type,
+        id: newSrv.id,
+        name: newSrv.name,
+        qty: formData.qty,
+        amount: formatCurrency(priceNum * formData.qty),
+        note: formData.note
+      };
+
+      // 更新服務記錄列表
+      setServiceRecords(prev => prev.map(r => r.recordId === record.recordId ? updatedRecord : r));
+
+      let inventoryUpdates = [];
+      let newInventoryLogs = [];
+
+      if (oldSrv && oldSrv.id === newSrv.id) {
+        // 服務項目不變，計算數量的多退少補
+        const delta = formData.qty - record.qty;
+        if (delta !== 0) {
+          inventoryUpdates.push({ id: oldSrv.id, delta: -delta });
+          newInventoryLogs.push({
+            id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+            itemId: oldSrv.id,
+            date: formData.date + ' 00:00:00',
+            type: oldSrv.type,
+            reason: delta > 0 ? '客戶服務變更(增加使用)' : '客戶服務變更(減少使用退回)',
+            qty: -delta
+          });
+        }
+      } else {
+        // 服務項目已變更：先退回舊的，再扣除新的
+        if (oldSrv) {
+          inventoryUpdates.push({ id: oldSrv.id, delta: record.qty });
+          newInventoryLogs.push({
+            id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+            itemId: oldSrv.id,
+            date: formData.date + ' 00:00:00',
+            type: oldSrv.type,
+            reason: '客戶服務變更(取消原服務)',
+            qty: record.qty
+          });
+        }
+        inventoryUpdates.push({ id: newSrv.id, delta: -formData.qty });
+        newInventoryLogs.push({
+          id: 'REC' + Date.now() + Math.floor(Math.random() * 1000) + 1,
+          itemId: newSrv.id,
+          date: formData.date + ' 00:00:00',
+          type: newSrv.type,
+          reason: '客戶服務變更(使用新服務)',
+          qty: -formData.qty
+        });
+      }
+
+      // 同步變更庫存數量
+      if (inventoryUpdates.length > 0) {
+        setServices(prev => prev.map(srv => {
+          const update = inventoryUpdates.find(u => u.id === srv.id);
+          if (update && srv.stock !== '無限') {
+            return { ...srv, stock: srv.stock + update.delta };
+          }
+          return srv;
+        }));
+      }
+
+      // 寫入變更日誌
+      if (newInventoryLogs.length > 0) {
+        setInventoryRecords(prev => [...newInventoryLogs, ...prev]);
+      }
+
+      closeModal();
+    };
+
+    if (modalType !== 'editServiceRecord' || !record) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[700px] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">客戶服務修改</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8">
+            <div className="grid grid-cols-[100px_1fr] gap-y-6 text-sm items-center">
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>日期</span>
+              <input type="date" name="date" value={formData.date} onChange={handleChange} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-[200px] focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all text-gray-800" />
+
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>服務名稱</span>
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1">
+                  <select name="serviceId" value={formData.serviceId} onChange={handleChange} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-full appearance-none text-gray-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all">
+                    <option value="">請選擇</option>
+                    {services.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({formatCurrency(s.price)} MOP)</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500 font-medium">數量</span>
+                  <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50/50 overflow-hidden">
+                    <button type="button" onClick={() => handleQtyChange(-1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-200/50 transition-colors font-bold">-</button>
+                    <input type="text" readOnly value={formData.qty} className="w-12 text-center bg-transparent text-gray-800 font-medium outline-none" />
+                    <button type="button" onClick={() => handleQtyChange(1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-200/50 transition-colors font-bold">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <span className="text-gray-500 text-right pr-6 self-start mt-3 font-medium">備註</span>
+              <textarea name="note" value={formData.note} onChange={handleChange} placeholder="請輸入備註" className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-3 outline-none w-full h-32 resize-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"></textarea>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+            <AppleButtonSecondary onClick={closeModal}>取消</AppleButtonSecondary>
+            <AppleButtonPrimary onClick={handleSave}>確定</AppleButtonPrimary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalInventoryChangeSingle = () => {
+    const item = selectedCustomer; 
+    const [formData, setFormData] = useState({
+      date: new Date().toISOString().split('T')[0],
+      qty: 0,
+      reason: ''
+    });
+    const [isInfinite, setIsInfinite] = useState(false);
+
+    useEffect(() => {
+      if (modalType === 'inventoryChangeSingle' && item) {
+        setFormData({
+          date: new Date().toISOString().split('T')[0],
+          qty: 0,
+          reason: ''
+        });
+        setIsInfinite(item.stock === '無限');
+      }
+    }, [modalType, item]);
+
+    if (modalType !== 'inventoryChangeSingle' || !item) return null;
+
+    const handleQtyChange = (delta) => {
+      if (isInfinite) return;
+      setFormData(prev => ({ ...prev, qty: prev.qty + delta }));
+    };
+
+    const handleSave = () => {
+      if (isInfinite) {
+        setServices(prev => prev.map(srv =>
+          srv.id === item.id ? { ...srv, stock: '無限' } : srv
+        ));
+        const newRecord = {
+          id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+          itemId: item.id,
+          date: formData.date + ' 00:00:00',
+          type: item.type,
+          reason: formData.reason || '設為無限庫存',
+          qty: '無限'
+        };
+        setInventoryRecords(prev => [newRecord, ...prev]);
+        closeModal();
+        return;
+      }
+
+      if (formData.qty !== 0 || item.stock === '無限') {
+        const baseStock = item.stock === '無限' ? 0 : item.stock;
+        const finalStock = baseStock + formData.qty;
+
+        setServices(prev => prev.map(srv =>
+          srv.id === item.id ? { ...srv, stock: finalStock } : srv
+        ));
+        
+        const newRecord = {
+          id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+          itemId: item.id,
+          date: formData.date + ' 00:00:00',
+          type: item.type,
+          reason: formData.reason || (item.stock === '無限' ? '解除無限並變更數量' : (formData.qty > 0 ? '增加' : '減少')),
+          qty: formData.qty
+        };
+        setInventoryRecords(prev => [newRecord, ...prev]);
+      }
+      closeModal();
+    };
+
+    const baseStockForPreview = item.stock === '無限' ? 0 : item.stock;
+    const newStockPreview = isInfinite ? '無限' : baseStockForPreview + formData.qty;
+    const previewColorClass = newStockPreview === '無限' ? 'text-blue-600' : (newStockPreview > baseStockForPreview ? 'text-green-600' : newStockPreview < baseStockForPreview ? 'text-orange-500' : 'text-gray-900');
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[600px] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">新增庫存變動</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8">
+            <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100 mb-6 flex flex-wrap gap-x-6 gap-y-3 text-sm">
+              <div className="flex items-center"><span className="text-gray-500 w-20">服務編號：</span><span className="font-mono text-gray-900">{item.id}</span></div>
+              <div className="flex items-center"><span className="text-gray-500 w-20">服務名稱：</span><span className="font-medium text-gray-900">{item.name}</span></div>
+              <div className="flex items-center"><span className="text-gray-500 w-20">當前庫存：</span><span className={`font-medium text-gray-900 ${item.stock === '無限' ? 'text-2xl leading-none' : 'text-base'}`}>{item.stock === '無限' ? '∞' : item.stock}</span></div>
+            </div>
+
+            <div className="grid grid-cols-[100px_1fr] gap-y-6 text-sm items-center">
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>日期</span>
+              <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-[200px] focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all text-gray-800" />
+
+              <span className="text-gray-500 text-right pr-6 font-medium"><span className="text-red-500">* </span>變動數量</span>
+              <div className="flex flex-col gap-3">
+                <label className="flex items-center gap-2 cursor-pointer w-fit">
+                  <input type="checkbox" checked={isInfinite} onChange={(e) => setIsInfinite(e.target.checked)} className="w-4 h-4 text-blue-500 focus:ring-blue-500 rounded border-gray-300"/>
+                  <span className="text-gray-800 font-medium">設為無限庫存</span>
+                </label>
+                <div className="flex items-center gap-4">
+                  <div className={`flex items-center border border-gray-200 rounded-xl bg-gray-50/50 overflow-hidden shadow-sm ${isInfinite ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <button type="button" onClick={() => handleQtyChange(-1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-200/50 transition-colors font-bold w-10">-</button>
+                    <input type="text" readOnly value={isInfinite ? '∞' : formData.qty} className={`w-14 text-center bg-transparent text-gray-800 font-medium outline-none ${isInfinite ? 'text-2xl' : 'text-base'}`} />
+                    <button type="button" onClick={() => handleQtyChange(1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-200/50 transition-colors font-bold w-10">+</button>
+                  </div>
+                  <span className="text-gray-500">變動後庫存：<span className={`font-medium ${previewColorClass} ${newStockPreview === '無限' ? 'text-2xl leading-none' : 'text-base'}`}>{newStockPreview === '無限' ? '∞' : newStockPreview}</span></span>
+                </div>
+              </div>
+
+              <span className="text-gray-500 text-right pr-6 self-start mt-3 font-medium">變動原因</span>
+              <div className="relative">
+                <textarea value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-3 outline-none w-full h-28 resize-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all shadow-sm" placeholder="請輸入變動原因"></textarea>
+                <span className="absolute bottom-3 right-4 text-xs text-gray-400">{formData.reason.length}/200</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+            <AppleButtonSecondary onClick={closeModal}>取消</AppleButtonSecondary>
+            <AppleButtonPrimary onClick={handleSave}>確認</AppleButtonPrimary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalInventoryChangeBulk = () => {
+    const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [changes, setChanges] = useState([{ id: '', qty: 0, key: Date.now() }]);
+
+    useEffect(() => {
+      if (modalType === 'inventoryChangeBulk') {
+        setDate(new Date().toISOString().split('T')[0]);
+        setChanges([{ id: '', qty: 0, key: Date.now() }]);
+      }
+    }, [modalType]);
+
+    const handleAddChange = () => {
+      setChanges(prev => [...prev, { id: '', qty: 0, key: Date.now() }]);
+    };
+
+    const handleRemoveChange = (index) => {
+      setChanges(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleItemChange = (index, value) => {
+      setChanges(prev => {
+        const newChanges = [...prev];
+        newChanges[index].id = value;
+        return newChanges;
+      });
+    };
+
+    const handleQtyChange = (index, delta) => {
+      setChanges(prev => {
+        const newChanges = [...prev];
+        newChanges[index].qty += delta;
+        return newChanges;
+      });
+    };
+
+    const handleSave = () => {
+      const validChanges = changes.filter(c => c.id !== '' && c.qty !== 0);
+      if (validChanges.length === 0) {
+        closeModal();
+        return;
+      }
+
+      const newRecords = [];
+
+      setServices(prev => prev.map(item => {
+        const itemChanges = validChanges.filter(c => c.id === item.id);
+        if (itemChanges.length > 0) {
+          const totalQtyChange = itemChanges.reduce((sum, c) => sum + c.qty, 0);
+          
+          itemChanges.forEach(c => {
+             newRecords.push({
+               id: 'REC' + Date.now() + Math.floor(Math.random() * 1000),
+               itemId: item.id,
+               date: date + ' 00:00:00',
+               type: item.type,
+               reason: c.qty > 0 ? '批量增加' : '批量減少',
+               qty: c.qty
+             });
+          });
+
+          return { ...item, stock: item.stock === '無限' ? '無限' : item.stock + totalQtyChange };
+        }
+        return item;
+      }));
+      
+      if (newRecords.length > 0) {
+        setInventoryRecords(prev => [...newRecords, ...prev]);
+      }
+      closeModal();
+    };
+
+    if (modalType !== 'inventoryChangeBulk') return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[750px] max-h-[90vh] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">新增庫存變動</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8 overflow-y-auto flex-1">
+            <div className="flex items-center text-sm mb-6 pb-6 border-b border-gray-100">
+              <span className="text-gray-500 pr-4 font-medium"><span className="text-red-500">* </span>日期</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-200 bg-gray-50/50 rounded-xl px-4 py-2.5 outline-none w-[200px] focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all text-gray-800" />
+            </div>
+
+            <div className="space-y-6">
+              {changes.map((change, index) => {
+                const currentItem = services.find(i => i.id === change.id);
+                const currentStock = currentItem ? currentItem.stock : 0;
+                const isInf = currentStock === '無限';
+                const baseStock = isInf ? 0 : currentStock;
+                const newStock = isInf ? '無限' : baseStock + change.qty;
+                const previewColorClass = isInf ? 'text-blue-600' : (newStock > baseStock ? 'text-green-600' : newStock < baseStock ? 'text-orange-500' : 'text-gray-900');
+
+                return (
+                  <div key={change.key} className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100">
+                    <div className="flex items-center gap-4 text-sm mb-3">
+                      <span className="text-gray-500 font-medium shrink-0"><span className="text-red-500">* </span>服務</span>
+                      <div className="relative flex-1">
+                        <select 
+                          value={change.id} 
+                          onChange={(e) => handleItemChange(index, e.target.value)} 
+                          className="border border-gray-200 bg-white rounded-xl px-4 py-2.5 outline-none w-full appearance-none text-gray-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all shadow-sm"
+                        >
+                          <option value="">請選擇</option>
+                          {services.map(item => (
+                            <option key={item.id} value={item.id}>{item.id} - {item.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                      </div>
+
+                      <div className={`flex items-center border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm shrink-0 ${isInf ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <button type="button" onClick={() => handleQtyChange(index, -1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-100 transition-colors font-bold">-</button>
+                        <input type="text" readOnly value={change.qty} className="w-14 text-center bg-transparent text-gray-800 font-medium outline-none" />
+                        <button type="button" onClick={() => handleQtyChange(index, 1)} className="px-3 py-2.5 text-gray-500 hover:bg-gray-100 transition-colors font-bold">+</button>
+                      </div>
+
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => handleRemoveChange(index)} className="text-red-500 hover:text-red-600 font-medium px-2 py-2 transition-colors disabled:opacity-50" disabled={changes.length === 1}>刪除</button>
+                        <button onClick={handleAddChange} className="text-blue-500 hover:text-blue-600 font-medium px-2 py-2 transition-colors">新增</button>
+                      </div>
+                    </div>
+                    
+                    {change.id && (
+                      <div className="text-xs text-gray-500 ml-11 pl-2">
+                        現有庫存：<span className={`font-medium ${isInf ? 'text-blue-600 text-xl leading-none' : 'text-gray-700 text-sm'}`}>{isInf ? '∞' : currentStock}</span> 新增數量：<span className={`font-medium ${change.qty > 0 ? 'text-blue-600' : change.qty < 0 ? 'text-orange-500' : 'text-gray-500'}`}>{isInf ? '無效' : change.qty}</span> 變更後庫存：<span className={`font-medium ${previewColorClass} ${newStock === '無限' ? 'text-xl leading-none' : 'text-sm'}`}>{newStock === '無限' ? '∞' : newStock}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+            <AppleButtonSecondary onClick={closeModal}>取消</AppleButtonSecondary>
+            <AppleButtonPrimary onClick={handleSave}>確認</AppleButtonPrimary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalInventoryRecord = () => {
+    const item = selectedCustomer; 
+    
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [reason, setReason] = useState('');
+    
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const [appliedReason, setAppliedReason] = useState('');
+
+    if (modalType !== 'inventoryRecord' || !item) return null;
+
+    const filteredRecords = inventoryRecords.filter(r => {
+      if (r.itemId !== item.id) return false;
+      if (appliedStartDate && r.date < appliedStartDate) return false;
+      if (appliedEndDate && r.date > appliedEndDate + ' 23:59:59') return false;
+      if (appliedReason && !r.reason.includes(appliedReason)) return false;
+      return true;
+    });
+
+    const paginationProps = usePagination(filteredRecords);
+
+    const handleSearch = () => {
+      setAppliedStartDate(startDate);
+      setAppliedEndDate(endDate);
+      setAppliedReason(reason);
+    };
+
+    const handleReset = () => {
+      setStartDate('');
+      setEndDate('');
+      setReason('');
+      setAppliedStartDate('');
+      setAppliedEndDate('');
+      setAppliedReason('');
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[1000px] max-h-[90vh] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">庫存變動記錄</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8 overflow-y-auto flex-1 bg-[#F5F5F7]">
+            <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 mb-6 flex flex-wrap gap-4 items-center">
+              <div className="flex items-center border border-gray-200 bg-gray-50/50 rounded-xl overflow-hidden shadow-sm text-sm">
+                <span className="text-gray-500 bg-gray-100/50 px-3 py-1.5 border-r border-gray-200/50 whitespace-nowrap">變動時間</span>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="p-1.5 outline-none w-36 bg-transparent text-gray-700 px-3" />
+                <span className="px-2 text-gray-400">-</span>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-1.5 outline-none w-36 bg-transparent text-gray-700 px-3" />
+              </div>
+              <div className="w-56"><AppleInput label="變動原因" placeholder="請輸入" defaultValue={reason} onChange={(e) => setReason(e.target.value)} /></div>
+              <div className="flex-1"></div>
+              <div className="flex gap-2">
+                <AppleButtonSecondary onClick={handleReset}>重置</AppleButtonSecondary>
+                <AppleButtonPrimary onClick={handleSearch}>查詢</AppleButtonPrimary>
+              </div>
+            </div>
+
+            <div className="bg-gray-100/80 p-4 rounded-xl border border-gray-200 mb-6 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+              <div className="flex items-center"><span className="text-gray-500 mr-2">服務編號：</span><span className="font-mono text-gray-900">{item.id}</span></div>
+              <div className="flex items-center"><span className="text-gray-500 mr-2">服務名稱：</span><span className="font-medium text-gray-900">{item.name}</span></div>
+              <div className="flex items-center"><span className="text-gray-500 mr-2">現有庫存：</span><span className={`font-medium text-blue-600 ${item.stock === '無限' ? 'text-2xl leading-none' : 'text-base'}`}>{item.stock === '無限' ? '∞' : item.stock}</span></div>
+            </div>
+
+            <div className="mb-4 flex justify-end">
+              <PageSizeSelector pageSize={paginationProps.pageSize} setPageSize={paginationProps.setPageSize} />
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left min-w-[800px]">
+                  <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                    <tr>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">變更時間</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">變更編號</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">服務類型</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">變更原因</th>
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">變更數量</th>
+                      <th className="py-3 px-4 font-medium text-center whitespace-nowrap">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-gray-700">
+                    {paginationProps.currentData.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="py-8 text-center text-gray-500">暫無變動記錄</td>
+                      </tr>
+                    ) : (
+                      paginationProps.currentData.map((r, i) => (
+                        <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-4 px-4 whitespace-nowrap">{r.date}</td>
+                          <td className="py-4 px-4 text-xs font-mono text-gray-500">{r.id}</td>
+                          <td className="py-4 px-4">{r.type}</td>
+                          <td className="py-4 px-4">{r.reason}</td>
+                          <td className="py-4 px-4">
+                            <span className={`font-medium ${r.qty > 0 ? 'text-blue-600' : 'text-orange-500'}`}>{r.qty > 0 ? `+${r.qty}` : r.qty}</span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            {/* 依影片展示，操作欄暫留空 */}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationFooter {...paginationProps} />
+            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-100 bg-white flex justify-end">
+            <AppleButtonSecondary onClick={closeModal}>關閉</AppleButtonSecondary>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ModalBillDetails = () => {
+    const bill = selectedCustomer;
+    if (modalType !== 'billDetails' || !bill) return null;
+
+    const monthRecords = serviceRecords.filter(r => r.customerId === bill.customerId && r.date.startsWith(bill.month));
+    const servicesTotal = monthRecords.reduce((sum, r) => sum + (parseFloat(String(r.amount || 0).replace(/,/g, '')) || 0), 0);
+    const basicFee = parseFloat(String(bill.basicFee || 9900).replace(/,/g, '')) || 0;
+    const prepaid = parseFloat(String(bill.prepaid || 0).replace(/,/g, '')) || 0;
+    const totalFee = basicFee + servicesTotal;
+    const amountPayable = totalFee - prepaid;
+
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+        <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[700px] flex flex-col overflow-hidden border border-white/40">
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">結算詳情</h2>
+            <button onClick={closeModal} className="text-gray-400 hover:bg-gray-200/50 hover:text-gray-700 p-2 rounded-full transition-all active:scale-95"><X size={20}/></button>
+          </div>
+          
+          <div className="p-8">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-6 bg-gray-50/80 p-4 rounded-xl border border-gray-100">
+              <div className="flex gap-8">
+                <span>住院號: <span className="font-medium text-gray-900">{bill.customerId}</span></span>
+                <span>客戶姓名: <span className="font-medium text-gray-900">{bill.name}</span></span>
+              </div>
+              <span>賬單月份: <span className="font-medium text-gray-900">{bill.month}</span></span>
+            </div>
+
+            <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-200">
+                  <tr>
+                    <th className="py-3 px-4 font-medium">收費項目</th>
+                    <th className="py-3 px-4 font-medium">服務名稱</th>
+                    <th className="py-3 px-4 font-medium text-right">金額(MOP)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700">
+                  <tr>
+                    <td className="py-4 px-4 font-medium text-gray-900">基本院費 <span className="text-xs text-gray-400 font-normal ml-1">(交下月院費)</span></td>
+                    <td className="py-4 px-4"></td>
+                    <td className="py-4 px-4 text-right font-medium">{formatCurrency(basicFee)}</td>
+                  </tr>
+                  {monthRecords.map((r, i) => (
+                    <tr key={i}>
+                      <td className="py-4 px-4 text-gray-500">服務收費</td>
+                      <td className="py-4 px-4">{r.name}</td>
+                      <td className="py-4 px-4 text-right">{formatCurrency(r.amount)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-gray-50/30">
+                    <td className="py-4 px-4 font-bold text-gray-900">費用合計</td>
+                    <td className="py-4 px-4"></td>
+                    <td className="py-4 px-4 text-right font-bold text-gray-900">{formatCurrency(totalFee)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-4 px-4 font-medium text-gray-900">預繳費用</td>
+                    <td className="py-4 px-4"></td>
+                    <td className="py-4 px-4 text-right text-blue-600 font-medium">{prepaid > 0 ? `-${formatCurrency(prepaid)}` : '0.00'}</td>
+                  </tr>
+                  <tr className="bg-blue-50/30">
+                    <td className="py-4 px-4 font-bold text-gray-900">應繳費用</td>
+                    <td className="py-4 px-4"></td>
+                    <td className="py-4 px-4 text-right font-bold text-red-600 text-base">{formatCurrency(amountPayable)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-screen font-sans bg-[#F5F5F7] overflow-hidden text-gray-800 selection:bg-blue-100 selection:text-blue-900">
+      <TopBar />
+      <div className="flex flex-1 overflow-hidden relative">
+        <Sidebar />
+        
+        {activeMenu === '客戶信息管理' && <CustomerView />}
+        {activeMenu.startsWith('服務記錄') && <ServiceRecordView customerId={activeMenu.split('-')[1]} />}
+        {activeMenu === '庫存概覽' && <InventoryView />}
+        {activeMenu === '服務管理' && <ServicesView />}
+        {activeMenu === '賬單管理' && <BillsView />}
+        {activeMenu === '角色管理' && <RoleManagementView />}
+        {activeMenu === '新增角色' && <RoleAddView />}
+        {activeMenu === '編輯角色' && <RoleEditView />}
+        {activeMenu === '用戶管理' && <UserManagementView />}
+        {activeMenu === '編輯用戶' && <UserEditView />}
+      </div>
+
+      {modalType === 'details' && <ModalDetails />}
+      {(modalType === 'edit' || modalType === 'add') && <ModalEdit />}
+      {(modalType === 'addService' || modalType === 'editService') && <ModalService />}
+      <ModalServiceRecordAdd />
+      <ModalServiceRecordEdit />
+      <ModalInventoryChangeSingle />
+      <ModalInventoryChangeBulk />
+      <ModalInventoryRecord />
+      <ModalBillDetails />
+      <ModalConfirmDelete />
+      <ModalNotAvailable />
+    </div>
+  );
+}
