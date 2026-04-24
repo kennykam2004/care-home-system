@@ -36,64 +36,72 @@ export const addCashRecord = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) {
-      res.status(404).json({ error: '客戶不存在' });
-      return;
-    }
+    const record = await prisma.$transaction(async (tx) => {
+      const parsedAmount = parseFloat(amount);
 
-    const record = await prisma.cashRecord.create({
-      data: {
-        customerId,
-        type,
-        amount: parseFloat(amount),
-        date: new Date(date),
-        reason,
-        note,
-        collectedBy: userId
+      const customer = await tx.customer.findUnique({ where: { id: customerId } });
+      if (!customer) {
+        throw new Error('客戶不存在');
       }
-    });
 
-    // If it's income, update customer balance
-    if (type === '收入') {
-      await prisma.customer.update({
-        where: { id: customerId },
-        data: { balance: customer.balance + parseFloat(amount) }
+      const newRecord = await tx.cashRecord.create({
+        data: {
+          customerId,
+          type,
+          amount: parsedAmount,
+          date: new Date(date),
+          reason,
+          note,
+          collectedBy: userId
+        }
       });
-    }
+
+      // If it's income, atomically update customer balance
+      if (type === '收入') {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { balance: { increment: parsedAmount } }
+        });
+      }
+
+      return newRecord;
+    });
 
     broadcastDataUpdate('cash-records', 'create', record.id);
     res.json(record);
   } catch (error) {
     console.error('Add cash record error:', error);
-    res.status(500).json({ error: '新增現金進賬記錄失敗' });
+    const message = error instanceof Error ? error.message : '新增現金進賬記錄失敗';
+    res.status(400).json({ error: message });
   }
 };
 
 export const deleteCashRecord = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
-    const record = await prisma.cashRecord.findUnique({ where: { id } });
-    if (!record) {
-      res.status(404).json({ error: '記錄不存在' });
-      return;
-    }
 
-    // Reverse the balance change if it was income
-    if (record.type === '收入') {
-      const customer = await prisma.customer.findUnique({ where: { id: record.customerId } });
-      if (customer) {
-        await prisma.customer.update({
+    await prisma.$transaction(async (tx) => {
+      const record = await tx.cashRecord.findUnique({ where: { id } });
+      if (!record) {
+        throw new Error('記錄不存在');
+      }
+
+      // Reverse the balance change if it was income
+      if (record.type === '收入') {
+        await tx.customer.update({
           where: { id: record.customerId },
-          data: { balance: customer.balance - record.amount }
+          data: { balance: { decrement: record.amount } }
         });
       }
-    }
 
-    await prisma.cashRecord.delete({ where: { id } });
+      await tx.cashRecord.delete({ where: { id } });
+    });
+
     broadcastDataUpdate('cash-records', 'delete', id);
     res.json({ message: '刪除成功' });
   } catch (error) {
-    res.status(500).json({ error: '刪除現金進賬記錄失敗' });
+    console.error('Delete cash record error:', error);
+    const message = error instanceof Error ? error.message : '刪除現金進賬記錄失敗';
+    res.status(400).json({ error: message });
   }
 };

@@ -34,31 +34,38 @@ export const addPrepaidRecord = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) {
-      res.status(404).json({ error: '客戶不存在' });
-      return;
-    }
+    const record = await prisma.$transaction(async (tx) => {
+      const parsedAmount = parseFloat(amount);
 
-    const record = await prisma.prepaidRecord.create({
-      data: {
-        customerId,
-        amount: parseFloat(amount),
-        date: new Date(date),
-        note
+      // 檢查客戶是否存在
+      const customer = await tx.customer.findUnique({ where: { id: customerId } });
+      if (!customer) {
+        throw new Error('客戶不存在');
       }
-    });
 
-    // Update customer balance
-    await prisma.customer.update({
-      where: { id: customerId },
-      data: { balance: customer.balance + parseFloat(amount) }
+      const newRecord = await tx.prepaidRecord.create({
+        data: {
+          customerId,
+          amount: parsedAmount,
+          date: new Date(date),
+          note
+        }
+      });
+
+      // 使用原子增量更新余額
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { balance: { increment: parsedAmount } }
+      });
+
+      return newRecord;
     });
 
     broadcastDataUpdate('prepaid-records', 'create', record.id);
     res.json(record);
   } catch (error) {
     console.error('Add prepaid error:', error);
-    res.status(500).json({ error: '新增預繳費記錄失敗' });
+    const message = error instanceof Error ? error.message : '新增預繳費記錄失敗';
+    res.status(400).json({ error: message });
   }
 };

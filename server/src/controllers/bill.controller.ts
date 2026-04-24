@@ -102,22 +102,26 @@ export const deductPrepaid = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) {
-      res.status(404).json({ error: '客戶不存在' });
-      return;
-    }
+    const parsedAmount = parseFloat(amount);
+    const result = await prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.findUnique({ where: { id: customerId } });
+      if (!customer) {
+        throw new Error('客戶不存在');
+      }
 
-    // Deduct from balance
-    const newBalance = Math.max(0, customer.balance - amount);
-    await prisma.customer.update({
-      where: { id: customerId },
-      data: { balance: newBalance }
+      const newBalance = Math.max(0, customer.balance - parsedAmount);
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { balance: newBalance }
+      });
+
+      return { customerId, amount: parsedAmount, newBalance };
     });
 
-    res.json({ success: true, newBalance });
+    res.json({ success: true, newBalance: result.newBalance });
   } catch (error) {
     console.error('Deduct prepaid error:', error);
-    res.status(500).json({ error: '預繳費劃扣失敗' });
+    const message = error instanceof Error ? error.message : '預繳費劃扣失敗';
+    res.status(400).json({ error: message });
   }
 };

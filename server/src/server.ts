@@ -16,6 +16,7 @@ import serviceRecordRoutes from './routes/serviceRecord.routes.js';
 import prepaidRoutes from './routes/prepaid.routes.js';
 import billPublishRoutes from './routes/billPublish.routes.js';
 import cashRecordRoutes from './routes/cashRecord.routes.js';
+import { loginRateLimiter } from './middleware/rateLimit.middleware.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -27,6 +28,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+app.use('/api/auth/login', loginRateLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);

@@ -37,14 +37,14 @@ async function main() {
 
   console.log('Created roles:', roles.map(r => r.name));
 
-  // Create director user (password: director123)
-  const hashedPassword = await bcrypt.hash('director123', 12);
+  // Create director user (password: admin123)
+  const hashedPassword = await bcrypt.hash('admin123', 12);
 
   const director = await prisma.user.upsert({
-    where: { employeeId: '000001' },
+    where: { employeeId: 'admin' },
     update: {},
     create: {
-      employeeId: '000001',
+      employeeId: 'admin',
       name: '甘家豪 院長',
       password: hashedPassword,
       phone: '12345678',

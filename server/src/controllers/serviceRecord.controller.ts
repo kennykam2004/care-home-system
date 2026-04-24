@@ -30,55 +30,96 @@ export const createServiceRecord = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const record = await prisma.serviceRecord.create({
-      data: {
-        customerId,
-        date: new Date(date),
-        type,
-        serviceId,
-        name,
-        qty,
-        amount,
-        note
+    const record = await prisma.$transaction(async (tx) => {
+      // 檢查庫存是否足夠
+      const service = await tx.service.findUnique({ where: { id: serviceId } });
+      if (service && service.stock !== null && service.stock < qty) {
+        throw new Error(`庫存不足：只剩 ${service.stock} 個`);
       }
-    });
 
-    // 同步更新庫存數量
-    const service = await prisma.service.findUnique({ where: { id: serviceId } });
-    if (service && service.stock !== null) {
-      const newStock = service.stock - qty;
-      await prisma.service.update({
-        where: { id: serviceId },
-        data: { stock: newStock }
-      });
-
-      // 寫入庫存變動記錄
-      await prisma.inventoryRecord.create({
+      const newRecord = await tx.serviceRecord.create({
         data: {
-          itemId: serviceId,
+          customerId,
           date: new Date(date),
           type,
-          reason: '客戶服務使用扣除',
-          qty: -qty
+          serviceId,
+          name,
+          qty,
+          amount,
+          note
         }
       });
-    }
+
+      // 同步更新庫存數量
+      if (service && service.stock !== null) {
+        await tx.service.update({
+          where: { id: serviceId },
+          data: { stock: service.stock - qty }
+        });
+
+        // 寫入庫存變動記錄
+        await tx.inventoryRecord.create({
+          data: {
+            itemId: serviceId,
+            date: new Date(date),
+            type,
+            reason: '客戶服務使用扣除',
+            qty: -qty
+          }
+        });
+      }
+
+      return newRecord;
+    });
 
     broadcastDataUpdate('service-records', 'create', record.recordId);
     res.json(record);
   } catch (error) {
     console.error('Create service record error:', error);
-    res.status(500).json({ error: '新增服務記錄失敗' });
+    const message = error instanceof Error ? error.message : '新增服務記錄失敗';
+    res.status(400).json({ error: message });
   }
 };
 
 export const deleteServiceRecord = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
-    await prisma.serviceRecord.delete({ where: { recordId: id } });
+
+    const record = await prisma.serviceRecord.findUnique({ where: { recordId: id } });
+    if (!record) {
+      res.status(404).json({ error: '服務記錄不存在' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 還原庫存
+      const service = await tx.service.findUnique({ where: { id: record.serviceId } });
+      if (service && service.stock !== null) {
+        await tx.service.update({
+          where: { id: record.serviceId },
+          data: { stock: service.stock + record.qty }
+        });
+
+        // 寫入庫存變動記錄（逆轉）
+        await tx.inventoryRecord.create({
+          data: {
+            itemId: record.serviceId,
+            date: new Date(),
+            type: record.type,
+            reason: `刪除服務記錄逆轉: ${record.name}`,
+            qty: record.qty
+          }
+        });
+      }
+
+      // 刪除服務記錄
+      await tx.serviceRecord.delete({ where: { recordId: id } });
+    });
+
     broadcastDataUpdate('service-records', 'delete', id);
     res.json({ message: '刪除成功' });
   } catch (error) {
+    console.error('Delete service record error:', error);
     res.status(500).json({ error: '刪除服務記錄失敗' });
   }
 };
