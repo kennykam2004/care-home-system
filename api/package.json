@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "postinstall": "prisma generate --schema=../server/prisma/schema.prisma"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -16,6 +16,6 @@
     "prisma": "^5.22.0"
   },
   "prisma": {
-    "schema": "../server/prisma/schema.prisma"
+    "schema": "./schema.prisma"
   }
 }
