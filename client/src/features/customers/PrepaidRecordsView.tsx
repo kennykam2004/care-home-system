@@ -40,7 +40,7 @@ export function PrepaidRecordsView() {
     note: ''
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [recordsRes, customersRes] = await Promise.all([
         api.get('/prepaid-records'),
@@ -53,14 +53,14 @@ export function PrepaidRecordsView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  useSocketEvent('prepaid-records', useCallback(() => fetchData(), []));
-  useSocketEvent('customers', useCallback(() => fetchData(), []));
+  useSocketEvent('prepaid-records', useCallback(() => fetchData(), [fetchData]));
+  useSocketEvent('customers', useCallback(() => fetchData(), [fetchData]));
 
   const filteredRecords = records.filter(r => {
     if (filterCustomerId && r.customerId !== filterCustomerId) return false;

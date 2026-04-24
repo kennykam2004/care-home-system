@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Breadcrumb } from '../../components/layout';
 import { AppleInput, AppleButtonPrimary, AppleButtonSecondary, AppleModal } from '../../components/ui';
 import { useSocketEvent } from '../../hooks/useSocket';
+import { usePagination } from '../../hooks/usePagination';
 import api from '../../api/client';
 
 interface Service {
@@ -23,6 +24,8 @@ export function ServicesView() {
   const [formData, setFormData] = useState({ id: '', type: '', name: '', price: '', stock: '', isCommon: false });
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deletingService, setDeletingService] = useState<Service | null>(null);
+
+  const paginationProps = usePagination(filteredServices);
 
   const fetchServices = async () => {
     try {
@@ -131,6 +134,18 @@ export function ServicesView() {
             />
           </div>
         </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-500">每頁顯示</span>
+          <select
+            value={paginationProps.pageSize}
+            onChange={(e) => paginationProps.setPageSize(Number(e.target.value))}
+            className="border border-gray-200 bg-gray-50/50 rounded-lg px-2 py-1 text-sm outline-none"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 flex flex-col">
@@ -148,7 +163,7 @@ export function ServicesView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 text-gray-700">
-              {filteredServices.map((s) => (
+              {paginationProps.currentData.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="py-4 px-4 font-medium">{s.id}</td>
                   <td className="py-4 px-4">{s.type}</td>
@@ -174,6 +189,25 @@ export function ServicesView() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+          <span>顯示 {paginationProps.currentData.length} 筆中的 {(paginationProps.currentPage - 1) * paginationProps.pageSize + 1}-{(paginationProps.currentPage * paginationProps.pageSize)} 筆</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage - 1)}
+              disabled={paginationProps.currentPage === 1}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              上一頁
+            </button>
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage + 1)}
+              disabled={paginationProps.currentPage === paginationProps.totalPages}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              下一頁
+            </button>
+          </div>
         </div>
       </div>
 

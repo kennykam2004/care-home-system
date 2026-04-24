@@ -5,8 +5,12 @@ export const MODULES = [
   { key: 'inventory', name: '庫存概覽' },
   { key: 'services', name: '服務管理' },
   { key: 'bills', name: '賬單管理' },
+  { key: 'prepaid-records', name: '預繳費記錄' },
+  { key: 'bill-publishes', name: '賬單發佈' },
+  { key: 'cash-records', name: '現金進賬' },
   { key: 'users', name: '用戶管理' },
   { key: 'roles', name: '角色管理' },
+  { key: 'audit-logs', name: '審計日誌' },
 ];
 
 export function usePermission() {

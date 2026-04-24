@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { broadcastDataUpdate } from '../socket/index.js';
+import { createAuditLog } from '../services/audit.service.js';
 
 export const getPrepaidRecords = async (req: AuthRequest, res: Response) => {
   try {
@@ -59,6 +60,18 @@ export const addPrepaidRecord = async (req: AuthRequest, res: Response) => {
       });
 
       return newRecord;
+    });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'prepaid-records',
+      action: 'create',
+      recordId: record.id,
+      recordType: 'PrepaidRecord',
+      changes: { customerId, amount: record.amount },
+      ipAddress: req.ip,
     });
 
     broadcastDataUpdate('prepaid-records', 'create', record.id);

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { broadcastDataUpdate } from '../socket/index.js';
+import { createAuditLog } from '../services/audit.service.js';
 
 export const getCustomers = async (req: AuthRequest, res: Response) => {
   try {
@@ -60,6 +61,18 @@ export const createCustomer = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'customers',
+      action: 'create',
+      recordId: customer.id,
+      recordType: 'Customer',
+      changes: { careId, name, gender, idCard },
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('customers', 'create', customer.id);
     res.json(customer);
   } catch (error) {
@@ -72,6 +85,13 @@ export const updateCustomer = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
     const { name, bed, gender, idCard, birth, phone, status, basicFee, subsidy, deposit, admissionDate, note, balance } = req.body;
+
+    // Get original customer for changes
+    const originalCustomer = await prisma.customer.findUnique({ where: { id } });
+    if (!originalCustomer) {
+      res.status(404).json({ error: '客戶不存在' });
+      return;
+    }
 
     const customer = await prisma.customer.update({
       where: { id },
@@ -92,6 +112,21 @@ export const updateCustomer = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'customers',
+      action: 'update',
+      recordId: customer.id,
+      recordType: 'Customer',
+      changes: {
+        before: originalCustomer,
+        after: customer
+      },
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('customers', 'update', customer.id);
     res.json(customer);
   } catch (error) {
@@ -103,7 +138,28 @@ export const updateCustomer = async (req: AuthRequest, res: Response) => {
 export const deleteCustomer = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
+
+    // Get customer before delete for audit
+    const customer = await prisma.customer.findUnique({ where: { id } });
+    if (!customer) {
+      res.status(404).json({ error: '客戶不存在' });
+      return;
+    }
+
     await prisma.customer.delete({ where: { id } });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'customers',
+      action: 'delete',
+      recordId: id,
+      recordType: 'Customer',
+      changes: customer,
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('customers', 'delete', id);
     res.json({ message: '刪除成功' });
   } catch (error) {
@@ -120,6 +176,19 @@ export const addFamilyMember = async (req: AuthRequest, res: Response) => {
     const family = await prisma.family.create({
       data: { customerId, name, phone, isMain: isMain || false }
     });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'customers',
+      action: 'create',
+      recordId: family.id,
+      recordType: 'Family',
+      changes: { customerId, name, phone, isMain },
+      ipAddress: req.ip,
+    });
+
     res.json(family);
   } catch (error) {
     res.status(500).json({ error: '新增家屬失敗' });
@@ -130,10 +199,30 @@ export const updateFamilyMember = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
     const { name, phone, isMain } = req.body;
+
+    const originalFamily = await prisma.family.findUnique({ where: { id } });
+    if (!originalFamily) {
+      res.status(404).json({ error: '家屬不存在' });
+      return;
+    }
+
     const family = await prisma.family.update({
       where: { id },
       data: { name, phone, isMain }
     });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'customers',
+      action: 'update',
+      recordId: family.id,
+      recordType: 'Family',
+      changes: { before: originalFamily, after: family },
+      ipAddress: req.ip,
+    });
+
     res.json(family);
   } catch (error) {
     res.status(500).json({ error: '更新家屬失敗' });
@@ -143,7 +232,27 @@ export const updateFamilyMember = async (req: AuthRequest, res: Response) => {
 export const deleteFamilyMember = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
+
+    const family = await prisma.family.findUnique({ where: { id } });
+    if (!family) {
+      res.status(404).json({ error: '家屬不存在' });
+      return;
+    }
+
     await prisma.family.delete({ where: { id } });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'customers',
+      action: 'delete',
+      recordId: id,
+      recordType: 'Family',
+      changes: family,
+      ipAddress: req.ip,
+    });
+
     res.json({ message: '刪除成功' });
   } catch (error) {
     res.status(500).json({ error: '刪除家屬失敗' });

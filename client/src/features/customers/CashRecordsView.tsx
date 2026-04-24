@@ -40,7 +40,7 @@ export function CashRecordsView() {
     note: ''
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [recordsRes, customersRes] = await Promise.all([
         api.get('/cash-records'),
@@ -53,14 +53,14 @@ export function CashRecordsView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  useSocketEvent('cash-records', useCallback(() => fetchData(), []));
-  useSocketEvent('customers', useCallback(() => fetchData(), []));
+  useSocketEvent('cash-records', useCallback(() => fetchData(), [fetchData]));
+  useSocketEvent('customers', useCallback(() => fetchData(), [fetchData]));
 
   const filteredRecords = records.filter(r => {
     if (filterCustomerId && r.customerId !== filterCustomerId) return false;

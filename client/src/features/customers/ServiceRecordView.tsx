@@ -62,7 +62,7 @@ export function ServiceRecordView() {
     note: ''
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [customersRes, recordsRes, servicesRes] = await Promise.all([
         api.get('/customers'),
@@ -79,19 +79,19 @@ export function ServiceRecordView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [customerId]);
 
   useEffect(() => {
     fetchData();
-  }, [customerId]);
+  }, [fetchData]);
 
   useSocketEvent('service-records', useCallback(() => {
     fetchData();
-  }, []));
+  }, [fetchData]));
 
   useSocketEvent('customers', useCallback(() => {
     fetchData();
-  }, []));
+  }, [fetchData]));
 
   const filteredRecords = records.filter((r) => {
     if (appliedStartDate && r.date < appliedStartDate) return false;

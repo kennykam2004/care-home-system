@@ -12,10 +12,8 @@ import { PrepaidRecordsView } from './features/customers/PrepaidRecordsView';
 import { BillPublishView } from './features/customers/BillPublishView';
 import { CashRecordsView } from './features/customers/CashRecordsView';
 import { RoleManagementView } from './features/roles/RoleManagementView';
-import { RoleAddView } from './features/roles/RoleAddView';
-import { RoleEditView } from './features/roles/RoleEditView';
 import { UserManagementView } from './features/users/UserManagementView';
-import { UserEditView } from './features/users/UserEditView';
+import AuditLogView from './features/audit/AuditLogView';
 
 function App() {
   return (
@@ -39,10 +37,8 @@ function App() {
         <Route path="bill-publishes" element={<BillPublishView />} />
         <Route path="cash-records" element={<CashRecordsView />} />
         <Route path="roles" element={<RoleManagementView />} />
-        <Route path="roles/add" element={<RoleAddView />} />
-        <Route path="roles/edit" element={<RoleEditView />} />
         <Route path="users" element={<UserManagementView />} />
-        <Route path="users/edit" element={<UserEditView />} />
+        <Route path="audit-logs" element={<AuditLogView />} />
       </Route>
     </Routes>
   );

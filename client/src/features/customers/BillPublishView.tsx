@@ -39,7 +39,7 @@ export function BillPublishView() {
     note: ''
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [publishesRes, customersRes, recordsRes] = await Promise.all([
         api.get('/bill-publishes'),
@@ -54,14 +54,14 @@ export function BillPublishView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  useSocketEvent('bill-publishes', useCallback(() => fetchData(), []));
-  useSocketEvent('service-records', useCallback(() => fetchData(), []));
+  useSocketEvent('bill-publishes', useCallback(() => fetchData(), [fetchData]));
+  useSocketEvent('service-records', useCallback(() => fetchData(), [fetchData]));
 
   const filteredPublishes = publishes.filter(p => p.month === filterMonth);
 

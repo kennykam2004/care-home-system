@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Breadcrumb } from '../../components/layout';
 import { AppleButtonPrimary, AppleButtonSecondary, AppleInput } from '../../components/ui';
 import { usePermission, MODULES } from '../../hooks/usePermission';
+import { usePagination } from '../../hooks/usePagination';
 import api from '../../api/client';
 
 interface Role {
@@ -26,13 +27,15 @@ export function RoleManagementView() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [addFormData, setAddFormData] = useState({ code: '', name: '', description: '', type: '普通角色' });
+  const [addFormData, setAddFormData] = useState({ code: '', name: '', description: '', type: '工作員' });
   const [editFormData, setEditFormData] = useState({ name: '', description: '', type: '' });
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [rolePermissions, setRolePermissions] = useState<ModulePermission[]>([]);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; role: Role | null }>({ show: false, role: null });
   const { canCreateUser } = usePermission();
+
+  const paginationProps = usePagination(roles);
 
   useEffect(() => {
     fetchRoles();
@@ -63,7 +66,7 @@ export function RoleManagementView() {
         type: addFormData.type,
       });
       setShowAddModal(false);
-      setAddFormData({ code: '', name: '', description: '', type: '普通角色' });
+      setAddFormData({ code: '', name: '', description: '', type: '工作員' });
       setError('');
       fetchRoles();
     } catch (err: any) {
@@ -169,11 +172,25 @@ export function RoleManagementView() {
 
       <div className="mb-4 flex justify-between items-center">
         <h2 className="text-xl font-bold text-gray-900">角色管理</h2>
-        {canCreateUser() && (
-          <AppleButtonPrimary icon={Plus} onClick={() => setShowAddModal(true)}>
-            新增角色
-          </AppleButtonPrimary>
-        )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-500">每頁顯示</span>
+            <select
+              value={paginationProps.pageSize}
+              onChange={(e) => paginationProps.setPageSize(Number(e.target.value))}
+              className="border border-gray-200 bg-gray-50/50 rounded-lg px-2 py-1 text-sm outline-none"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+          {canCreateUser() && (
+            <AppleButtonPrimary icon={Plus} onClick={() => setShowAddModal(true)}>
+              新增角色
+            </AppleButtonPrimary>
+          )}
+        </div>
       </div>
 
       {!canCreateUser() && (
@@ -196,7 +213,7 @@ export function RoleManagementView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 text-gray-700">
-              {roles.map((role) => (
+              {paginationProps.currentData.map((role) => (
                 <tr key={role.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="py-4 px-4 font-medium text-gray-900">{role.name}</td>
                   <td className="py-4 px-4 text-gray-500 font-mono">{role.code}</td>
@@ -239,6 +256,25 @@ export function RoleManagementView() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+          <span>顯示 {paginationProps.currentData.length} 筆中的 {(paginationProps.currentPage - 1) * paginationProps.pageSize + 1}-{(paginationProps.currentPage * paginationProps.pageSize)} 筆</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage - 1)}
+              disabled={paginationProps.currentPage === 1}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              上一頁
+            </button>
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage + 1)}
+              disabled={paginationProps.currentPage === paginationProps.totalPages}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              下一頁
+            </button>
+          </div>
         </div>
       </div>
 
@@ -286,7 +322,7 @@ export function RoleManagementView() {
                     value={addFormData.type}
                     onChange={(e) => setAddFormData({ ...addFormData, type: e.target.value })}
                   >
-                    <option value="普通角色">普通角色</option>
+                    <option value="工作員">工作員</option>
                     <option value="管理員">管理員</option>
                   </select>
                 </div>
@@ -350,7 +386,7 @@ export function RoleManagementView() {
                     value={editFormData.type}
                     onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
                   >
-                    <option value="普通角色">普通角色</option>
+                    <option value="工作員">工作員</option>
                     <option value="管理員">管理員</option>
                   </select>
                 </div>

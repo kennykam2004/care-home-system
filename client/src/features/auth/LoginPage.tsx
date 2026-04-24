@@ -12,6 +12,12 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSubmit(e as any);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -54,6 +60,7 @@ export function LoginPage() {
                 placeholder="請輸入員工編號"
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
+                onKeyDown={handleKeyDown}
               />
             </div>
 
@@ -66,6 +73,7 @@ export function LoginPage() {
                 placeholder="請輸入密碼"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={handleKeyDown}
               />
             </div>
 

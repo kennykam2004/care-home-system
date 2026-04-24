@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { broadcastDataUpdate } from '../socket/index.js';
+import { createAuditLog } from '../services/audit.service.js';
 
 export const getBills = async (req: AuthRequest, res: Response) => {
   try {
@@ -58,6 +59,19 @@ export const createBill = async (req: AuthRequest, res: Response) => {
         debt: debt || 0
       }
     });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'bills',
+      action: 'create',
+      recordId: bill.id,
+      recordType: 'Bill',
+      changes: { customerId, month, totalFee },
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('bills', 'create', bill.id);
     res.json(bill);
   } catch (error) {
@@ -71,10 +85,29 @@ export const updateBill = async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { basicFee, serviceFee, totalFee, prepaid, debt, status } = req.body;
 
+    const originalBill = await prisma.bill.findUnique({ where: { id } });
+    if (!originalBill) {
+      res.status(404).json({ error: '賬單不存在' });
+      return;
+    }
+
     const bill = await prisma.bill.update({
       where: { id },
       data: { basicFee, serviceFee, totalFee, prepaid, debt, status }
     });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'bills',
+      action: 'update',
+      recordId: bill.id,
+      recordType: 'Bill',
+      changes: { before: originalBill, after: bill },
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('bills', 'update', bill.id);
     res.json(bill);
   } catch (error) {
@@ -85,7 +118,27 @@ export const updateBill = async (req: AuthRequest, res: Response) => {
 export const deleteBill = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
+
+    const bill = await prisma.bill.findUnique({ where: { id } });
+    if (!bill) {
+      res.status(404).json({ error: '賬單不存在' });
+      return;
+    }
+
     await prisma.bill.delete({ where: { id } });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'bills',
+      action: 'delete',
+      recordId: id,
+      recordType: 'Bill',
+      changes: bill,
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('bills', 'delete', id);
     res.json({ message: '刪除成功' });
   } catch (error) {
@@ -103,19 +156,46 @@ export const deductPrepaid = async (req: AuthRequest, res: Response) => {
     }
 
     const parsedAmount = parseFloat(amount);
+    if (parsedAmount <= 0) {
+      res.status(400).json({ error: '扣除金額必須大於零' });
+      return;
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({ where: { id: customerId } });
       if (!customer) {
         throw new Error('客戶不存在');
       }
 
-      const newBalance = Math.max(0, customer.balance - parsedAmount);
+      if (customer.balance < parsedAmount) {
+        throw new Error(`預繳費餘額不足：可用餘額為 ${customer.balance}`);
+      }
+
+      const originalBalance = customer.balance;
+      const newBalance = customer.balance - parsedAmount;
       await tx.customer.update({
         where: { id: customerId },
         data: { balance: newBalance }
       });
 
-      return { customerId, amount: parsedAmount, newBalance };
+      return { customerId, amount: parsedAmount, newBalance, originalBalance };
+    });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'bills',
+      action: 'update',
+      recordId: result.customerId,
+      recordType: 'Customer',
+      changes: {
+        action: 'deductPrepaid',
+        amount: result.amount,
+        before: result.originalBalance,
+        after: result.newBalance
+      },
+      ipAddress: req.ip,
     });
 
     res.json({ success: true, newBalance: result.newBalance });

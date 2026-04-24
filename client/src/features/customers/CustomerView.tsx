@@ -48,14 +48,9 @@ export function CustomerView() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; customer: Customer | null }>({ show: false, customer: null });
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       const { data } = await api.get('/customers');
       setCustomers(data);
@@ -64,11 +59,15 @@ export function CustomerView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   useSocketEvent('customers', useCallback(() => {
     fetchCustomers();
-  }, []));
+  }, [fetchCustomers]));
 
   const filteredCustomers = customers.filter((c) => {
     const matchStatus = statusFilter === '全部' || c.status === statusFilter;
@@ -107,21 +106,6 @@ export function CustomerView() {
     }
   };
 
-  const handleDeleteCustomer = async () => {
-    if (!deleteConfirm.customer) return;
-    try {
-      await api.delete(`/customers/${deleteConfirm.customer.id}`);
-      setDeleteConfirm({ show: false, customer: null });
-      fetchCustomers();
-    } catch (error) {
-      console.error('Failed to delete customer:', error);
-    }
-  };
-
-  const openDeleteConfirm = (customer: Customer) => {
-    setDeleteConfirm({ show: true, customer });
-  };
-
   if (isLoading) {
     return (
       <div className="p-8 flex-1 overflow-auto bg-[#F5F5F7] flex items-center justify-center">
@@ -158,6 +142,18 @@ export function CustomerView() {
             </select>
           </div>
           <AppleButtonSecondary onClick={() => setSearchTerm('')}>重置</AppleButtonSecondary>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-500">每頁顯示</span>
+          <select
+            value={paginationProps.pageSize}
+            onChange={(e) => paginationProps.setPageSize(Number(e.target.value))}
+            className="border border-gray-200 bg-gray-50/50 rounded-lg px-2 py-1 text-sm outline-none"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
         </div>
       </div>
 
@@ -206,24 +202,31 @@ export function CustomerView() {
                       >
                         服務
                       </button>
-                      <button
-                        className="hover:text-blue-600 transition-colors"
-                        onClick={() => handleToggleStatus(c)}
-                      >
-                        {c.status === '在院' ? '離院' : '在院'}
-                      </button>
-                      <button
-                        className="hover:text-red-600 transition-colors"
-                        onClick={() => openDeleteConfirm(c)}
-                      >
-                        刪除
-                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+          <span>顯示 {paginationProps.currentData.length} 筆中的 {(paginationProps.currentPage - 1) * paginationProps.pageSize + 1}-{(paginationProps.currentPage * paginationProps.pageSize)} 筆</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage - 1)}
+              disabled={paginationProps.currentPage === 1}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              上一頁
+            </button>
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage + 1)}
+              disabled={paginationProps.currentPage === paginationProps.totalPages}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              下一頁
+            </button>
+          </div>
         </div>
       </div>
 
@@ -282,32 +285,6 @@ export function CustomerView() {
       <AppleModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="入院新增">
         <CustomerForm onClose={() => setIsAddModalOpen(false)} onSave={fetchCustomers} isEdit={false} />
       </AppleModal>
-
-      {/* 刪除確認 Modal */}
-      {deleteConfirm.show && deleteConfirm.customer && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] w-[400px] overflow-hidden">
-            <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 bg-gray-50/50">
-              <h2 className="text-lg font-bold text-gray-900">確認刪除</h2>
-              <button onClick={() => setDeleteConfirm({ show: false, customer: null })} className="text-gray-400 hover:text-gray-700 p-2 rounded-full">
-                ✕
-              </button>
-            </div>
-
-            <div className="p-8">
-              <p className="text-gray-600">
-                確定要刪除客戶「<span className="font-medium text-gray-900">{deleteConfirm.customer.name}</span>」嗎？
-              </p>
-              <p className="text-sm text-gray-500 mt-2">此操作無法撤銷，所有相關資料將被刪除。</p>
-            </div>
-
-            <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
-              <AppleButtonSecondary onClick={() => setDeleteConfirm({ show: false, customer: null })}>取消</AppleButtonSecondary>
-              <AppleButtonPrimary onClick={handleDeleteCustomer} className="!bg-red-500 hover:!bg-red-600">確認刪除</AppleButtonPrimary>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -545,6 +522,22 @@ function CustomerForm({ customer, onClose, onSave, isEdit }: CustomerFormProps) 
       </div>
 
       <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+        {isEdit && customer && (
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm(`確定要刪除客戶「${customer.name}」嗎？此操作無法撤銷。`)) {
+                api.delete(`/customers/${customer.id}`).then(() => {
+                  onSave();
+                  onClose();
+                });
+              }
+            }}
+            className="mr-auto px-4 py-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            刪除客戶
+          </button>
+        )}
         <AppleButtonSecondary type="button" onClick={onClose}>取消</AppleButtonSecondary>
         <AppleButtonPrimary type="submit">儲存</AppleButtonPrimary>
       </div>

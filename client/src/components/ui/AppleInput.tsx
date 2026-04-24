@@ -6,6 +6,7 @@ interface AppleInputProps {
   defaultValue?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   type?: string;
   disabled?: boolean;
   required?: boolean;
@@ -18,6 +19,7 @@ export function AppleInput({
   defaultValue,
   value,
   onChange,
+  onKeyDown,
   type = 'text',
   disabled = false,
   required = false,
@@ -37,6 +39,7 @@ export function AppleInput({
         placeholder={placeholder}
         disabled={disabled}
         required={required}
+        onKeyDown={onKeyDown}
         className="p-1.5 px-3 outline-none text-sm w-full bg-transparent text-gray-800 placeholder-gray-400 disabled:text-gray-400"
         {...inputProps}
       />

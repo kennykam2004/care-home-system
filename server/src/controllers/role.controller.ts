@@ -24,7 +24,7 @@ export const createRole = async (req: AuthRequest, res: Response) => {
     }
 
     const role = await prisma.role.create({
-      data: { code, name, description, type: type || '普通角色' }
+      data: { code, name, description, type: type || '工作員' }
     });
 
     res.status(201).json(role);

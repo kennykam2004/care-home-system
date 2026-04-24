@@ -16,22 +16,22 @@ async function main() {
     prisma.role.upsert({
       where: { code: 'AM02' },
       update: {},
-      create: { code: 'AM02', name: '護士', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 護士', type: '普通角色' },
+      create: { code: 'AM02', name: '護士', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 護士', type: '工作員' },
     }),
     prisma.role.upsert({
       where: { code: 'AM03' },
       update: {},
-      create: { code: 'AM03', name: '活動協調員', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 活動協調員', type: '普通角色' },
+      create: { code: 'AM03', name: '活動協調員', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 活動協調員', type: '工作員' },
     }),
     prisma.role.upsert({
       where: { code: 'AM04' },
       update: {},
-      create: { code: 'AM04', name: '助理', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 助理', type: '普通角色' },
+      create: { code: 'AM04', name: '助理', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 助理', type: '工作員' },
     }),
     prisma.role.upsert({
       where: { code: 'AM05' },
       update: {},
-      create: { code: 'AM05', name: '入生命體徵健康照護員', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 入生命體徵健康照護員', type: '普通角色' },
+      create: { code: 'AM05', name: '入生命體徵健康照護員', org: '頤安(逸麗)護老院', description: '頤安(逸麗)護老院 入生命體徵健康照護員', type: '工作員' },
     }),
   ]);
 
@@ -45,7 +45,7 @@ async function main() {
     update: {},
     create: {
       employeeId: 'admin',
-      name: '甘家豪 院長',
+      name: '甘家豪',
       password: hashedPassword,
       phone: '12345678',
       email: 'director@carehome.com',

@@ -56,7 +56,7 @@ export function BillsView() {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [prepaidAmount, setPrepaidAmount] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [customersRes, recordsRes] = await Promise.all([
         api.get('/customers'),
@@ -69,15 +69,15 @@ export function BillsView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  useSocketEvent('bills', useCallback(() => fetchData(), []));
-  useSocketEvent('customers', useCallback(() => fetchData(), []));
-  useSocketEvent('service-records', useCallback(() => fetchData(), []));
+  useSocketEvent('bills', useCallback(() => fetchData(), [fetchData]));
+  useSocketEvent('customers', useCallback(() => fetchData(), [fetchData]));
+  useSocketEvent('service-records', useCallback(() => fetchData(), [fetchData]));
 
   // Generate bills dynamically from customers and their service records
   const generatedBills = customers.map(c => {

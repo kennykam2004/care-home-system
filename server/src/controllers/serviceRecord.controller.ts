@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { broadcastDataUpdate } from '../socket/index.js';
+import { createAuditLog } from '../services/audit.service.js';
 
 export const getServiceRecords = async (req: AuthRequest, res: Response) => {
   try {
@@ -72,6 +73,18 @@ export const createServiceRecord = async (req: AuthRequest, res: Response) => {
       return newRecord;
     });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'service-records',
+      action: 'create',
+      recordId: record.recordId,
+      recordType: 'ServiceRecord',
+      changes: { customerId, serviceId, name, qty, amount },
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('service-records', 'create', record.recordId);
     res.json(record);
   } catch (error) {
@@ -114,6 +127,18 @@ export const deleteServiceRecord = async (req: AuthRequest, res: Response) => {
 
       // 刪除服務記錄
       await tx.serviceRecord.delete({ where: { recordId: id } });
+    });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'service-records',
+      action: 'delete',
+      recordId: id,
+      recordType: 'ServiceRecord',
+      changes: record,
+      ipAddress: req.ip,
     });
 
     broadcastDataUpdate('service-records', 'delete', id);

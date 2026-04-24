@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../config/prisma.js';
 import { config } from '../config/index.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
+import { createAuditLog } from '../services/audit.service.js';
 
 export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -117,6 +118,18 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       include: { roles: { include: { role: true } } }
     });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'users',
+      action: 'create',
+      recordId: user.id,
+      recordType: 'User',
+      changes: { employeeId, name },
+      ipAddress: req.ip,
+    });
+
     const io = req.app.get('io');
     if (io) {
       io.emit('users:created', {
@@ -173,6 +186,18 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       include: { roles: { include: { role: true } } }
     });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'users',
+      action: 'update',
+      recordId: user.id,
+      recordType: 'User',
+      changes: { before: existing, after: { name, status } },
+      ipAddress: req.ip,
+    });
+
     const io = req.app.get('io');
     if (io) {
       io.emit('users:updated', {
@@ -209,6 +234,18 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 
     await prisma.user.delete({ where: { id } });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'users',
+      action: 'delete',
+      recordId: id,
+      recordType: 'User',
+      changes: existing,
+      ipAddress: req.ip,
+    });
+
     const io = req.app.get('io');
     if (io) {
       io.emit('users:deleted', { id });
@@ -226,11 +263,29 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { newPassword } = req.body;
 
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: '用戶不存在' });
+      return;
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, config.saltRounds);
 
     await prisma.user.update({
       where: { id },
       data: { password: hashedPassword }
+    });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'users',
+      action: 'update',
+      recordId: id,
+      recordType: 'User',
+      changes: { action: 'resetPassword', targetUser: existing.employeeId },
+      ipAddress: req.ip,
     });
 
     res.json({ message: '密碼重置成功' });

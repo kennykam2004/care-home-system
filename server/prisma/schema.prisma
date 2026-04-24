@@ -34,7 +34,7 @@ model Role {
   name        String
   org         String    @default("頤安(逸麗)護老院")
   description String?
-  type        String    @default("普通角色")
+  type        String    @default("工作員")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -219,4 +219,22 @@ model CashRecord {
   customer Customer @relation(fields: [customerId], references: [id])
 
   @@map("cash_records")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  userId      String
+  userName    String
+  module      String   // customers, bills, inventory, etc.
+  action      String   // create, update, delete
+  recordId    String   // 被操作的記錄 ID
+  recordType  String   // 記錄類型名稱
+  changes     String?  // JSON 格式的變動內容
+  ipAddress   String?
+
+  @@index([userId])
+  @@index([module])
+  @@index([timestamp])
+  @@map("audit_logs")
 }

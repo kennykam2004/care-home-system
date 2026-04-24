@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { broadcastDataUpdate } from '../socket/index.js';
+import { createAuditLog } from '../services/audit.service.js';
 
 export const getCashRecords = async (req: AuthRequest, res: Response) => {
   try {
@@ -67,6 +68,18 @@ export const addCashRecord = async (req: AuthRequest, res: Response) => {
       return newRecord;
     });
 
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'cash-records',
+      action: 'create',
+      recordId: record.id,
+      recordType: 'CashRecord',
+      changes: { customerId, type, amount: record.amount, reason },
+      ipAddress: req.ip,
+    });
+
     broadcastDataUpdate('cash-records', 'create', record.id);
     res.json(record);
   } catch (error) {
@@ -80,7 +93,7 @@ export const deleteCashRecord = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
 
-    await prisma.$transaction(async (tx) => {
+    const deletedRecord = await prisma.$transaction(async (tx) => {
       const record = await tx.cashRecord.findUnique({ where: { id } });
       if (!record) {
         throw new Error('記錄不存在');
@@ -95,6 +108,19 @@ export const deleteCashRecord = async (req: AuthRequest, res: Response) => {
       }
 
       await tx.cashRecord.delete({ where: { id } });
+      return record;
+    });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?.userId || '',
+      userName: req.user?.name || 'System',
+      module: 'cash-records',
+      action: 'delete',
+      recordId: id,
+      recordType: 'CashRecord',
+      changes: deletedRecord,
+      ipAddress: req.ip,
     });
 
     broadcastDataUpdate('cash-records', 'delete', id);

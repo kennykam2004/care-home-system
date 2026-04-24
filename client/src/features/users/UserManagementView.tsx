@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Key } from 'lucide-react';
 import { Breadcrumb } from '../../components/layout';
 import { AppleButtonPrimary, AppleButtonSecondary, AppleInput } from '../../components/ui';
 import { usePermission } from '../../hooks/usePermission';
+import { usePagination } from '../../hooks/usePagination';
 import api from '../../api/client';
 
 interface User {
@@ -50,7 +51,9 @@ export function UserManagementView() {
     roleId: '',
   });
   const [error, setError] = useState('');
-  const { canCreateUser } = usePermission();
+  const { canCreateUser, canResetPassword } = usePermission();
+
+  const paginationProps = usePagination(users);
 
   useEffect(() => {
     fetchUsers();
@@ -59,7 +62,7 @@ export function UserManagementView() {
 
   const fetchUsers = async () => {
     try {
-      const { data } = await api.get('/users');
+      const { data } = await api.get('/users?pageSize=50');
       setUsers(data.data);
     } catch (err) {
       console.error('Failed to fetch users:', err);
@@ -210,18 +213,26 @@ export function UserManagementView() {
 
       <div className="mb-4 flex justify-between items-center">
         <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
-        {canCreateUser() && (
-          <AppleButtonPrimary icon={Plus} onClick={() => setShowAddModal(true)}>
-            新增用戶
-          </AppleButtonPrimary>
-        )}
-      </div>
-
-      {!canCreateUser() && (
-        <div className="mb-4 text-sm text-gray-500 bg-blue-50 p-3 rounded-xl">
-          只有院長可以新增、編輯或刪除用戶
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-500">每頁顯示</span>
+            <select
+              value={paginationProps.pageSize}
+              onChange={(e) => paginationProps.setPageSize(Number(e.target.value))}
+              className="border border-gray-200 bg-gray-50/50 rounded-lg px-2 py-1 text-sm outline-none"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+          {canCreateUser() && (
+            <AppleButtonPrimary icon={Plus} onClick={() => setShowAddModal(true)}>
+              新增用戶
+            </AppleButtonPrimary>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
@@ -236,7 +247,7 @@ export function UserManagementView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 text-gray-700">
-              {users.map((user) => (
+              {paginationProps.currentData.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="py-4 px-4 font-medium text-gray-900">{user.name}</td>
                   <td className="py-4 px-4 text-gray-500 font-mono">{user.employeeId}</td>
@@ -280,6 +291,25 @@ export function UserManagementView() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+          <span>顯示 {paginationProps.currentData.length} 筆中的 {(paginationProps.currentPage - 1) * paginationProps.pageSize + 1}-{(paginationProps.currentPage * paginationProps.pageSize)} 筆</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage - 1)}
+              disabled={paginationProps.currentPage === 1}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              上一頁
+            </button>
+            <button
+              onClick={() => paginationProps.setCurrentPage(paginationProps.currentPage + 1)}
+              disabled={paginationProps.currentPage === paginationProps.totalPages}
+              className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+            >
+              下一頁
+            </button>
+          </div>
         </div>
       </div>
 

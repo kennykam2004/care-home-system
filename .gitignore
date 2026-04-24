@@ -13,6 +13,10 @@ server/dist
 .env.local
 .env.*.local
 
+# Database
+*.db
+server/prisma/dev.db
+
 # Logs
 *.log
 npm-debug.log*

@@ -69,6 +69,11 @@ export function Sidebar({}: SidebarProps) {
                       用戶管理
                     </div>
                   )}
+                  {canViewModule('users') && (
+                    <div className={menuItemClass('/audit-logs')} onClick={() => navigate('/audit-logs')}>
+                      審計日誌
+                    </div>
+                  )}
                 </>
               )}
               {(!canViewModule('roles') && !canViewModule('users')) && (

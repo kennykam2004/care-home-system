@@ -16,6 +16,7 @@ import serviceRecordRoutes from './routes/serviceRecord.routes.js';
 import prepaidRoutes from './routes/prepaid.routes.js';
 import billPublishRoutes from './routes/billPublish.routes.js';
 import cashRecordRoutes from './routes/cashRecord.routes.js';
+import auditRoutes from './routes/audit.routes.js';
 import { loginRateLimiter } from './middleware/rateLimit.middleware.js';
 
 const app = express();
@@ -41,6 +42,7 @@ app.use('/api/service-records', serviceRecordRoutes);
 app.use('/api/prepaid-records', prepaidRoutes);
 app.use('/api/bill-publishes', billPublishRoutes);
 app.use('/api/cash-records', cashRecordRoutes);
+app.use('/api/audit-logs', auditRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
